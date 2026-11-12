@@ -19,7 +19,16 @@ namespace Nerv.Client
 
         private NervInteraction _interaction;
         private readonly List<Rect> _panels = new List<Rect>();
-        private readonly List<(string text, float time, Color color)> _log = new List<(string, float, Color)>();
+        private sealed class LogEntry
+        {
+            public string Text;
+            public float Time;
+            public Color Color;
+            public int Count;
+        }
+
+        private const float LogLife = 14f;
+        private readonly List<LogEntry> _log = new List<LogEntry>();
         private readonly Dictionary<AtomId, int> _index = new Dictionary<AtomId, int>();
         private GUIStyle _panel, _title, _label, _small, _button, _active, _tag, _logStyle;
         private Texture2D _panelTex, _buttonTex, _activeTex, _tagTex;
@@ -46,8 +55,18 @@ namespace Nerv.Client
 
         private void Log(string text, Color color)
         {
-            _log.Add((text, Time.time, color));
-            if (_log.Count > 8) _log.RemoveAt(0);
+            // Повтор той же записи (одно и то же вещество опознано снова, цепная реакция) — счётчик ×N, а не новая строка.
+            LogEntry same = _log.Find(e => e.Text == text && Time.time - e.Time < LogLife);
+            if (same != null)
+            {
+                same.Count++;
+                same.Time = Time.time;
+                _log.Remove(same);
+                _log.Add(same);
+                return;
+            }
+            _log.Add(new LogEntry { Text = text, Time = Time.time, Color = color, Count = 1 });
+            if (_log.Count > 6) _log.RemoveAt(0);
         }
 
         private void OnGUI()
@@ -195,21 +214,26 @@ namespace Nerv.Client
 
         private void DrawLog(float h)
         {
+            _log.RemoveAll(e => Time.time - e.Time > LogLife);
             if (_log.Count == 0) return;
-            float y = h - 16 - _log.Count * 22;
-            var r = new Rect(252, y - 8, 420, _log.Count * 22 + 16);
+            const float line = 22f;
+            float width = 0f;
+            foreach (LogEntry e in _log) width = Mathf.Max(width, _logStyle.CalcSize(new GUIContent(LogText(e))).x);
+            float y = h - 16 - _log.Count * line;
+            var r = new Rect(252, y - 8, width + 24, _log.Count * line + 16);
             _panels.Add(r);
             GUI.Box(r, GUIContent.none, _panel);
             for (int i = 0; i < _log.Count; i++)
             {
-                (string text, float time, Color color) = _log[i];
-                float age = Time.time - time;
-                Color c = color;
-                c.a = Mathf.Clamp01(1.4f - age / 12f);
+                LogEntry e = _log[i];
+                Color c = e.Color;
+                c.a = Mathf.Clamp01((LogLife - (Time.time - e.Time)) / 4f);
                 _logStyle.normal.textColor = c;
-                GUI.Label(new Rect(264, y + i * 22, 400, 22), text, _logStyle);
+                GUI.Label(new Rect(264, y + i * line, width, line), LogText(e), _logStyle);
             }
         }
+
+        private static string LogText(LogEntry e) => e.Count > 1 ? e.Text + "   ×" + e.Count : e.Text;
 
         // ================= Подписи над молекулами =================
 
@@ -264,7 +288,10 @@ namespace Nerv.Client
             Vector2 size = _tag.CalcSize(new GUIContent(text));
             Color prev = GUI.color;
             if (unknown) GUI.color = new Color(1, 1, 1, 0.55f);
-            GUI.Label(new Rect(g.x - size.x / 2, g.y - size.y - 4, size.x, size.y), text, _tag);
+            // Не даём подписи уйти за край экрана.
+            float x = Mathf.Clamp(g.x - size.x / 2, 4, Screen.width / _uiScale - size.x - 4);
+            float yTop = Mathf.Clamp(g.y - size.y - 4, 4, Screen.height / _uiScale - size.y - 4);
+            GUI.Label(new Rect(x, yTop, size.x, size.y), text, _tag);
             GUI.color = prev;
             return true;
         }
@@ -297,7 +324,7 @@ namespace Nerv.Client
             _tag = new GUIStyle(GUI.skin.label) { fontSize = 12, padding = new RectOffset(6, 6, 2, 2), alignment = TextAnchor.MiddleCenter, wordWrap = false };
             _tag.normal.background = _tagTex;
             _tag.normal.textColor = Color.white;
-            _logStyle = new GUIStyle(GUI.skin.label) { fontSize = 13 };
+            _logStyle = new GUIStyle(GUI.skin.label) { fontSize = 13, wordWrap = false };
         }
 
         private static Texture2D Tex(Color c)

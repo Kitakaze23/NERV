@@ -20,6 +20,7 @@ namespace Nerv.Client
             public Transform Ball;
             public Material Material;
             public Color Color;
+            public bool Halo;
             public float Age, Life, MaxRadius, Intensity;
         }
 
@@ -63,8 +64,17 @@ namespace Nerv.Client
                 float fade = (1f - t) * (1f - t);
                 f.Light.intensity = f.Intensity * fade;
                 f.Ball.localScale = Vector3.one * (f.MaxRadius * 2f * Mathf.Sqrt(t));
-                f.Material.SetColor("_BaseColor", f.Color * (0.25f * fade));
-                f.Material.SetColor("_EmissionColor", f.Color * (2.5f * fade));
+                if (f.Halo)
+                {
+                    // Расходящаяся светящаяся «волна»: полое кольцо по Френелю.
+                    f.Material.SetColor("_Color", f.Color);
+                    f.Material.SetFloat("_Intensity", 3.5f * fade);
+                }
+                else
+                {
+                    f.Material.SetColor("_BaseColor", f.Color * (0.25f * fade));
+                    f.Material.SetColor("_EmissionColor", f.Color * (2.5f * fade));
+                }
             }
         }
 
@@ -99,11 +109,17 @@ namespace Nerv.Client
             MeshRenderer mr = ball.AddComponent<MeshRenderer>();
             mr.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
             mr.receiveShadows = false;
-            Material m = MoleculeView.MakeMaterial(Color.black, Color.black, 0.5f);
-            MoleculeView.MakeAdditive(m);
+            Material m = MoleculeView.MakeHalo(Color.black, 0f, 0f);
+            bool halo = m != null;
+            if (halo) m.SetFloat("_Hollow", 3f);
+            else
+            {
+                m = MoleculeView.MakeMaterial(Color.black, Color.black, 0.5f);
+                MoleculeView.MakeAdditive(m);
+            }
             mr.sharedMaterial = m;
 
-            return new Flash { Go = go, Light = l, Ball = ball.transform, Material = m };
+            return new Flash { Go = go, Light = l, Ball = ball.transform, Material = m, Halo = halo };
         }
     }
 }

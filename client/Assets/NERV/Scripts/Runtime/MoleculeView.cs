@@ -23,7 +23,9 @@ namespace Nerv.Client
         private readonly Dictionary<int, List<Matrix4x4>> _bonds = new Dictionary<int, List<Matrix4x4>>();
         private readonly List<Matrix4x4> _dots = new List<Matrix4x4>();
         private readonly List<Matrix4x4> _highlight = new List<Matrix4x4>();
-        private Material _dotMaterial, _highlightMaterial, _lineMaterial;
+        private readonly List<Matrix4x4> _cations = new List<Matrix4x4>();
+        private readonly List<Matrix4x4> _anions = new List<Matrix4x4>();
+        private Material _dotMaterial, _highlightMaterial, _lineMaterial, _cationMaterial, _anionMaterial;
         private LineRenderer _box;
         private float _boxDrawn = -1;
 
@@ -43,8 +45,15 @@ namespace Nerv.Client
             _sphere = PrimitiveMesh(PrimitiveType.Sphere);
             _cylinder = PrimitiveMesh(PrimitiveType.Cylinder);
             _dotMaterial = MakeMaterial(new Color(0.85f, 1f, 1f), NervEnvironment.Energy * 3f, 0.9f);
-            _highlightMaterial = MakeMaterial(new Color(0.36f, 0.88f, 0.9f, 0.25f), NervEnvironment.Energy * 0.6f, 0.9f);
-            MakeAdditive(_highlightMaterial);
+            _highlightMaterial = MakeHalo(new Color(0.36f, 0.88f, 0.9f), 1.6f, 0.05f);
+            if (_highlightMaterial == null)
+            {
+                _highlightMaterial = MakeMaterial(new Color(0.36f, 0.88f, 0.9f, 0.25f), NervEnvironment.Energy * 0.6f, 0.9f);
+                MakeAdditive(_highlightMaterial);
+            }
+            // Ореолы ионов: катион — тёплый, анион — холодный (как «плюс» и «минус» на схемах).
+            _cationMaterial = MakeHalo(new Color(1f, 0.45f, 0.25f), 1.1f, 0.18f);
+            _anionMaterial = MakeHalo(new Color(0.3f, 0.6f, 1f), 1.1f, 0.18f);
 
             Shader unlit = Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Unlit/Color");
             _lineMaterial = new Material(unlit);
@@ -97,11 +106,54 @@ namespace Nerv.Client
             m.renderQueue = (int)RenderQueue.Transparent;
         }
 
+        private static Shader _atomShader, _haloShader;
+        private static bool _shadersLoaded;
+
+        private static void LoadShaders()
+        {
+            if (_shadersLoaded) return;
+            _shadersLoaded = true;
+            _atomShader = Resources.Load<Shader>("Shaders/NervAtom");
+            _haloShader = Resources.Load<Shader>("Shaders/NervHalo");
+            if (_atomShader != null && !_atomShader.isSupported) _atomShader = null;
+            if (_haloShader != null && !_haloShader.isSupported) _haloShader = null;
+        }
+
+        /// <summary>«Стеклянный» материал атома с неоновым ободком (NERV/Atom); при отсутствии шейдера — URP Lit.</summary>
+        public static Material MakeAtomMaterial(Color c)
+        {
+            LoadShaders();
+            if (_atomShader == null) return MakeMaterial(c, c * 0.18f, 0.82f);
+            var m = new Material(_atomShader) { enableInstancing = true };
+            m.SetColor("_BaseColor", c * 0.85f);
+            // Ободок: насыщенный цвет элемента, чуть разбавленный белым; HDR-яркость отдаётся Bloom.
+            Color rim = Color.Lerp(c, Color.white, 0.25f);
+            float lum = 0.3f * c.r + 0.59f * c.g + 0.11f * c.b;
+            m.SetColor("_RimColor", rim);
+            m.SetFloat("_RimStrength", Mathf.Lerp(2.2f, 1.1f, lum)); // светлым элементам — мягче
+            m.SetFloat("_RimPower", 2.6f);
+            m.SetFloat("_Gloss", 90f);
+            m.SetFloat("_Core", 0.3f);
+            return m;
+        }
+
+        /// <summary>Аддитивный ореол (NERV/Halo). Null, если шейдер недоступен.</summary>
+        public static Material MakeHalo(Color c, float intensity, float pulse)
+        {
+            LoadShaders();
+            if (_haloShader == null) return null;
+            var m = new Material(_haloShader) { enableInstancing = true };
+            m.SetColor("_Color", c);
+            m.SetFloat("_Intensity", intensity);
+            m.SetFloat("_Pulse", pulse);
+            return m;
+        }
+
         private Material ElementMaterial(int z)
         {
             if (_elementMaterials.TryGetValue(z, out Material m)) return m;
             Color c = ElementColor(ElementTable.Get(z));
-            m = MakeMaterial(c, c * 0.18f, 0.82f);
+            m = MakeAtomMaterial(c);
             _elementMaterials[z] = m;
             return m;
         }
@@ -123,6 +175,8 @@ namespace Nerv.Client
             foreach (List<Matrix4x4> l in _bonds.Values) l.Clear();
             _dots.Clear();
             _highlight.Clear();
+            _cations.Clear();
+            _anions.Clear();
 
             int n = snap.AtomCount;
             if (_neighbors.Length < n)
@@ -145,7 +199,14 @@ namespace Nerv.Client
                 float r = VisualRadius(e) * s;
                 List(_atoms, e.Z).Add(Matrix4x4.TRS(p, Quaternion.identity, Vector3.one * (2f * r)));
                 if (i == HoverIndex || i == GrabbedIndex)
-                    _highlight.Add(Matrix4x4.TRS(p, Quaternion.identity, Vector3.one * (2f * r * (i == GrabbedIndex ? 1.25f : 1.15f))));
+                    _highlight.Add(Matrix4x4.TRS(p, Quaternion.identity, Vector3.one * (2f * r * (i == GrabbedIndex ? 1.7f : 1.5f))));
+                int q = snap.Charges[i];
+                if (q != 0)
+                {
+                    // Ореол растёт с величиной заряда: Ca²⁺ заметнее Na⁺.
+                    float k = 2f * r * (1.9f + 0.25f * Mathf.Min(Mathf.Abs(q) - 1, 2));
+                    (q > 0 ? _cations : _anions).Add(Matrix4x4.TRS(p, Quaternion.identity, Vector3.one * k));
+                }
                 if (snap.FreeValences[i] > 0) AddValenceDots(app, snap, i, p, r);
             }
 
@@ -182,6 +243,8 @@ namespace Nerv.Client
             foreach (KeyValuePair<int, List<Matrix4x4>> kv in _bonds) Draw(_cylinder, ElementMaterial(kv.Key), kv.Value, true);
             Draw(_sphere, _dotMaterial, _dots, false);
             Draw(_sphere, _highlightMaterial, _highlight, false);
+            if (_cationMaterial != null) Draw(_sphere, _cationMaterial, _cations, false);
+            if (_anionMaterial != null) Draw(_sphere, _anionMaterial, _anions, false);
 
             UpdateBox(app.BoxHalfSize * s);
         }
