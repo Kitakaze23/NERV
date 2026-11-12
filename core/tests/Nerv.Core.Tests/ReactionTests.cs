@@ -59,11 +59,61 @@ namespace Nerv.Core.Tests
                 Console.WriteLine("      seed " + seed + ": реакций " + sim.ReactionLog.Count + ", " + Formulas(sim));
             }
             Assert.True(ignited >= 5, "искра поджигает смесь почти всегда (" + ignited + "/6)");
-            // Пламя пока гаснет раньше, чем выгорит вся смесь (баланс тепла — этап 4); фиксируем минимум.
-            Assert.True(water >= 2, "образуется вода (" + water + ")");
+            Assert.True(water >= 18, "образуется вода (" + water + " из 48)");
             Assert.True(chain, "работают цепные шаги с радикалами");
             Assert.True(heat, "выделяется тепло");
             Assert.True(mapOk, "карта атомов шага 1: 4 разных атома");
+        }
+
+        /// <summary>Сцена клиента «Гремучий газ»: 12 H₂ + 6 O₂, коробка ±6 Å, искра в центр (как щелчок в клиенте).</summary>
+        [Test]
+        public static void Flame_BurnsMostOfHydrogen()
+        {
+            int water = 0, fizzled = 0;
+            for (ulong seed = 1; seed <= 8; seed++)
+            {
+                Simulation sim = NewSim(temperature: 298, seed: 1000 + seed, withData: true);
+                sim.Settings.BoxHalfSize = 6;
+                for (int k = 0; k < 18; k++)
+                {
+                    var at = new Vec3((k % 3) * 3.2 - 3.2, ((k / 3) % 3) * 3.2 - 3.2, (k / 9) * 3.2 - 1.6);
+                    if (k % 3 == 2) O2(sim, at); else H2(sim, at);
+                }
+                sim.Step(400);
+                sim.Apply(new Spark(Vec3.Zero, radius: 4, kelvin: 6000));
+                RunPs(sim, 10);
+                int w = sim.World.Molecules.Count(m => m.ToString() == "H2O");
+                water += w;
+                if (w < 5) fizzled++;
+                Console.WriteLine("      seed " + seed + ": H₂O " + w + "/12, " + Formulas(sim));
+            }
+            Assert.True(fizzled <= 1, "пламя проходит по смеси, а не гаснет (не выгорело: " + fizzled + "/8)");
+            Assert.True(water >= 0.7 * 96, "выгорает большая часть смеси (воды " + water + " из 96)");
+        }
+
+        /// <summary>Метан 6 CH₄ + 12 O₂: основные продукты — CO₂ и вода, часть углерода остаётся в CO и промежуточных.</summary>
+        [Test]
+        public static void Flame_BurnsMethane()
+        {
+            int co2 = 0, water = 0;
+            for (ulong seed = 1; seed <= 6; seed++)
+            {
+                Simulation sim = NewSim(temperature: 298, seed: 1000 + seed, withData: true);
+                sim.Settings.BoxHalfSize = 6;
+                for (int k = 0; k < 18; k++)
+                {
+                    var at = new Vec3((k % 3) * 3.4 - 3.4, ((k / 3) % 3) * 3.4 - 3.4, (k / 9) * 3.4 - 1.7);
+                    if (k % 3 == 1) CH4(sim, at); else O2(sim, at);
+                }
+                sim.Step(400);
+                sim.Apply(new Spark(Vec3.Zero, radius: 4, kelvin: 6000));
+                RunPs(sim, 10);
+                co2 += sim.World.Molecules.Count(m => m.ToString() == "CO2");
+                water += sim.World.Molecules.Count(m => m.ToString() == "H2O");
+                Console.WriteLine("      seed " + seed + ": " + Formulas(sim));
+            }
+            Assert.True(co2 >= 0.4 * 36, "углерод сгорает до CO₂ (" + co2 + " из 36)");
+            Assert.True(water >= 0.6 * 72, "водород сгорает до воды (" + water + " из 72)");
         }
 
         [Test]

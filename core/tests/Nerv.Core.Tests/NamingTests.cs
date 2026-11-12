@@ -18,7 +18,7 @@ namespace Nerv.Core.Tests
             ChemistryData d = ChemData;
             Assert.True(d.Compounds.Count >= 80, "веществ в базе: " + d.Compounds.Count);
             Assert.True(d.Ions.Count >= 30, "ионов: " + d.Ions.Count);
-            Assert.Equal(15, d.Reactions.Reactions.Count, "реакций");
+            Assert.True(d.Reactions.Reactions.Count >= 35, "реакций: " + d.Reactions.Reactions.Count);
             IReadOnlyList<string> errors = d.Reactions.Validate();
             Assert.Equal(0, errors.Count, "ошибки каталога: " + string.Join("; ", errors));
         }

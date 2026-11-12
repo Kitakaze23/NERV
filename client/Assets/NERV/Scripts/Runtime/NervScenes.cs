@@ -44,7 +44,7 @@ namespace Nerv.Client
             new Preset
             {
                 Name = "Гремучий газ",
-                Hint = "Смесь водорода и кислорода 2:1. Возьми «Искру» и щёлкни в центр.",
+                Hint = "Смесь водорода и кислорода 2 : 1. Возьми «Искру» и щёлкни в центр — по смеси побежит пламя.",
                 BoxHalfSize = 6f,
                 Build = sim =>
                 {
@@ -59,16 +59,16 @@ namespace Nerv.Client
             new Preset
             {
                 Name = "Горение метана",
-                Hint = "Метан и кислород. Поджигай искрой.",
+                Hint = "Метан и кислород 1 : 2. Щёлкни «Искрой» в центр — пламя пройдёт по смеси, останутся CO₂ и вода (и немного угарного газа CO).",
                 BoxHalfSize = 6f,
                 Build = sim =>
                 {
-                    CH4(sim, new Vec3(-2.5, 0, 0));
-                    CH4(sim, new Vec3(2.5, 0, 0));
-                    O2(sim, new Vec3(0, 3, 0));
-                    O2(sim, new Vec3(0, -3, 0));
-                    O2(sim, new Vec3(-2.5, 0, 3));
-                    O2(sim, new Vec3(2.5, 0, -3));
+                    for (int k = 0; k < 18; k++)
+                    {
+                        var at = new Vec3((k % 3) * 3.4 - 3.4, ((k / 3) % 3) * 3.4 - 3.4, (k / 9) * 3.4 - 1.7);
+                        if (k % 3 == 1) CH4(sim, at);
+                        else O2(sim, at);
+                    }
                 }
             },
             new Preset

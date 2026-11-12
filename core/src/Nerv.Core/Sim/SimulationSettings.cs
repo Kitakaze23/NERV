@@ -17,6 +17,17 @@ namespace Nerv.Core.Sim
         /// </summary>
         public double ThermostatTauFs { get; set; } = 100.0;
         /// <summary>
+        /// Термостат во время горения (после экзотермической реакции): тепло отводится медленнее,
+        /// как в реальном пламени, где реакция идёт почти адиабатически.
+        /// </summary>
+        public double FlameThermostatTauFs { get; set; } = 1500.0;
+        /// <summary>Сколько тиков после последней экзотермической реакции держится «режим пламени».</summary>
+        public int FlameHoldTicks { get; set; } = 4000;
+        /// <summary>Потолок температуры пламени, K: выше — обычное охлаждение.</summary>
+        public double FlameMaxTemperature { get; set; } = 3000.0;
+        /// <summary>Доля энергии, погашенной при сборке связи, которая в пламени отдаётся соседям теплом.</summary>
+        public double AssemblyHeatFraction { get; set; } = 1.0;
+        /// <summary>
         /// Скорость времени для клиента (сколько тиков делать за кадр). Ядро её только хранит:
         /// число тиков на кадр решает хост.
         /// </summary>

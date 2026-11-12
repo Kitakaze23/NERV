@@ -25,6 +25,12 @@ namespace Nerv.Client
         private readonly List<Matrix4x4> _highlight = new List<Matrix4x4>();
         private readonly List<Matrix4x4> _cations = new List<Matrix4x4>();
         private readonly List<Matrix4x4> _anions = new List<Matrix4x4>();
+
+        // Свечение раскалённых атомов в пламени: три ступени «чёрного тела» (тёмно-оранжевый → жёлто-белый).
+        private static readonly float[] HeatSteps = { 900f, 1600f, 2500f };
+        private readonly List<Matrix4x4>[] _hot = { new List<Matrix4x4>(), new List<Matrix4x4>(), new List<Matrix4x4>() };
+        private readonly Material[] _hotMaterials = new Material[3];
+        private Dictionary<AtomId, float> _heat = new Dictionary<AtomId, float>(), _heatNext = new Dictionary<AtomId, float>();
         private Material _dotMaterial, _highlightMaterial, _lineMaterial, _cationMaterial, _anionMaterial;
         private LineRenderer _box;
         private float _boxDrawn = -1;
@@ -54,6 +60,9 @@ namespace Nerv.Client
             // Ореолы ионов: катион — тёплый, анион — холодный (как «плюс» и «минус» на схемах).
             _cationMaterial = MakeHalo(new Color(1f, 0.45f, 0.25f), 0.9f, 0.18f);
             _anionMaterial = MakeHalo(new Color(0.3f, 0.6f, 1f), 0.9f, 0.18f);
+            _hotMaterials[0] = MakeHalo(new Color(1f, 0.28f, 0.05f), 0.7f, 0.25f);
+            _hotMaterials[1] = MakeHalo(new Color(1f, 0.5f, 0.12f), 1.1f, 0.25f);
+            _hotMaterials[2] = MakeHalo(new Color(1f, 0.85f, 0.55f), 1.6f, 0.25f);
 
             Shader unlit = Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Unlit/Color");
             _lineMaterial = new Material(unlit);
@@ -177,6 +186,10 @@ namespace Nerv.Client
             _highlight.Clear();
             _cations.Clear();
             _anions.Clear();
+            foreach (List<Matrix4x4> l in _hot) l.Clear();
+            // Сглаживание температуры атома (~0,15 с): мгновенная скорость отдельного атома слишком шумная.
+            float heatK = 1f - Mathf.Exp(-Time.deltaTime / 0.15f);
+            _heatNext.Clear();
 
             int n = snap.AtomCount;
             if (_neighbors.Length < n)
@@ -200,6 +213,16 @@ namespace Nerv.Client
                 List(_atoms, e.Z).Add(Matrix4x4.TRS(p, Quaternion.identity, Vector3.one * (2f * r)));
                 if (i == HoverIndex || i == GrabbedIndex)
                     _highlight.Add(Matrix4x4.TRS(p, Quaternion.identity, Vector3.one * (2f * r * (i == GrabbedIndex ? 1.7f : 1.5f))));
+                float tRaw = snap.Temperatures[i];
+                float heat = _heat.TryGetValue(snap.Ids[i], out float prevHeat) ? Mathf.Lerp(prevHeat, tRaw, heatK) : Mathf.Min(tRaw, 400f);
+                _heatNext[snap.Ids[i]] = heat;
+                for (int step = HeatSteps.Length - 1; step >= 0; step--)
+                {
+                    if (heat < HeatSteps[step]) continue;
+                    _hot[step].Add(Matrix4x4.TRS(p, Quaternion.identity, Vector3.one * (2f * r * (2.0f + 0.3f * step))));
+                    break;
+                }
+
                 int q = snap.Charges[i];
                 if (q != 0)
                 {
@@ -245,6 +268,9 @@ namespace Nerv.Client
             Draw(_sphere, _highlightMaterial, _highlight, false);
             if (_cationMaterial != null) Draw(_sphere, _cationMaterial, _cations, false);
             if (_anionMaterial != null) Draw(_sphere, _anionMaterial, _anions, false);
+            for (int step = 0; step < _hot.Length; step++)
+                if (_hotMaterials[step] != null) Draw(_sphere, _hotMaterials[step], _hot[step], false);
+            (_heat, _heatNext) = (_heatNext, _heat);
 
             UpdateBox(app.BoxHalfSize * s);
         }

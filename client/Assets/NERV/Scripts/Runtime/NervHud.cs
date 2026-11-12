@@ -30,6 +30,7 @@ namespace Nerv.Client
         private const float LogLife = 14f;
         private readonly List<LogEntry> _log = new List<LogEntry>();
         private readonly Dictionary<AtomId, int> _index = new Dictionary<AtomId, int>();
+        private GUIStyle _flameStyle;
         private GUIStyle _panel, _title, _label, _small, _button, _active, _tag, _logStyle;
         private Texture2D _panelTex, _buttonTex, _activeTex, _tagTex;
         private float _uiScale = 1f;
@@ -215,6 +216,9 @@ namespace Nerv.Client
 
             GUILayout.Space(6);
             GUILayout.Label("Атомов: " + snap.AtomCount + "   ·   " + (snap.Tick * 0.5 / 1000.0).ToString("0.0") + " пс", _small);
+            // Строка всегда занимает место (Layout и Repaint должны совпадать), меняется только текст.
+            _flameStyle.normal.textColor = NervEnvironment.Heat;
+            GUILayout.Label(snap.FlameActive ? "Идёт горение" : " ", _flameStyle);
 
             GUILayout.Space(8);
             GUILayout.Label("ВЕЩЕСТВА В СЦЕНЕ", _small);
@@ -349,6 +353,7 @@ namespace Nerv.Client
             _tag.normal.background = _tagTex;
             _tag.normal.textColor = Color.white;
             _logStyle = new GUIStyle(GUI.skin.label) { fontSize = 13, wordWrap = false };
+            _flameStyle = new GUIStyle(GUI.skin.label) { fontSize = 13, fontStyle = FontStyle.Bold };
         }
 
         private static Texture2D Tex(Color c)

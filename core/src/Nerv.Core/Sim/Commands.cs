@@ -118,7 +118,7 @@ namespace Nerv.Core.Sim
         public double Kelvin { get; }
         /// <summary>Сколько связей расщепить на радикалы (0 — только нагрев).</summary>
         public int Radicals { get; }
-        public Spark(Vec3 center, double radius = 3.0, double kelvin = 5000.0, int radicals = 2)
+        public Spark(Vec3 center, double radius = 3.0, double kelvin = 5000.0, int radicals = 3)
         {
             Center = center;
             Radius = radius;

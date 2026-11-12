@@ -20,6 +20,8 @@ namespace Nerv.Core.Model
 
         // Кэш топологии (пересчитывается в World.RebuildTopology).
         internal int Ia, Ib;
+        /// <summary>Кинетическая энергия, погашенная при сборке связи (а.е.м.·Å²/фс²) — в пламени возвращается соседям теплом.</summary>
+        internal double DrainedEnergy;
         /// <summary>Равновесная длина, Å.</summary>
         public double RestLength { get; internal set; }
         /// <summary>Глубина ямы Морзе, ккал/моль.</summary>

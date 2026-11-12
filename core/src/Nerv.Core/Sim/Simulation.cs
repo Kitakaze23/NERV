@@ -67,8 +67,15 @@ namespace Nerv.Core.Sim
 
         internal Xoshiro256 Rng => _rng;
 
+        /// <summary>Тик последней экзотермической реакции (для «режима пламени» термостата).</summary>
+        private long _lastExothermicTick = long.MinValue / 2;
+
+        /// <summary>Идёт горение/экзотермический процесс: реакция с выделением тепла была недавно.</summary>
+        public bool FlameActive => Tick - _lastExothermicTick < Settings.FlameHoldTicks;
+
         internal int AddReactionRecord(ReactionRecord record)
         {
+            if (record.Reaction.DeltaHKj < 0) _lastExothermicTick = Tick;
             _reactionLog.Add(record);
             return _reactionLog.Count - 1;
         }
@@ -147,7 +154,13 @@ namespace Nerv.Core.Sim
             }
 
             if (Settings.ThermostatEnabled)
-                Thermostat.Berendsen(w, Settings.TargetTemperature, dt, Settings.ThermostatTauFs);
+            {
+                // Пока идёт горение, тепло реакций отводится медленно — пламя успевает поджечь соседей.
+                // Выше потолка температуры — обычное (быстрое) охлаждение, чтобы продукты не распадались.
+                double tau = Settings.ThermostatTauFs;
+                if (FlameActive && Thermostat.Temperature(w) < Settings.FlameMaxTemperature) tau = Settings.FlameThermostatTauFs;
+                Thermostat.Berendsen(w, Settings.TargetTemperature, dt, tau);
+            }
 
             AdvanceBondProgress();
 
@@ -203,11 +216,22 @@ namespace Nerv.Core.Sim
                 }
                 double mi = w.Masses[i], mj = w.Masses[j];
                 Vec3 vcm = (w.Velocities[i] * mi + w.Velocities[j] * mj) / (mi + mj);
+                double keRel = 0.5 * mi * (w.Velocities[i] - vcm).LengthSquared + 0.5 * mj * (w.Velocities[j] - vcm).LengthSquared;
                 w.Velocities[i] = vcm + (w.Velocities[i] - vcm) * keep;
                 w.Velocities[j] = vcm + (w.Velocities[j] - vcm) * keep;
+                b.DrainedEnergy += keRel * (1.0 - keep * keep);
 
                 b.Progress = Math.Min(1.0, b.Progress + inc);
-                if (b.IsFormed) Emit(SimEventType.BondFormed, b.A, b.B, b.Id);
+                if (b.IsFormed)
+                {
+                    Emit(SimEventType.BondFormed, b.A, b.B, b.Id);
+                    // В пламени рекомбинация радикалов (H + OH → H₂O и т. п.) — главный источник тепла:
+                    // погашенную при сборке энергию отдаём соседям, а не теряем.
+                    if (FlameActive && Settings.AssemblyHeatFraction > 0 && b.DrainedEnergy > 0)
+                        ReactionEngine.AddHeat(this, (w.Positions[i] + w.Positions[j]) * 0.5,
+                            b.DrainedEnergy / Units.AccelFactor * Settings.AssemblyHeatFraction, i, j);
+                    b.DrainedEnergy = 0;
+                }
             }
         }
 
@@ -222,6 +246,7 @@ namespace Nerv.Core.Sim
             w.EnsureTopology();
             int n = w.AtomCount;
             snap.EnsureCapacity(n);
+            snap.FlameActive = FlameActive;
             snap.Tick = Tick;
             snap.TopologyVersion = w.TopologyVersion;
             snap.Temperature = Temperature;
@@ -233,6 +258,7 @@ namespace Nerv.Core.Sim
                 snap.Charges[i] = w.Charges[i];
                 snap.FreeValences[i] = w.FreeValences[i];
                 snap.LonePairs[i] = w.LonePairCounts[i];
+                snap.Temperatures[i] = (float)(w.Masses[i] * w.Velocities[i].LengthSquared / Units.AccelFactor / (3.0 * Units.Kb));
                 snap.Positions[3 * i] = (float)w.Positions[i].X;
                 snap.Positions[3 * i + 1] = (float)w.Positions[i].Y;
                 snap.Positions[3 * i + 2] = (float)w.Positions[i].Z;
@@ -313,6 +339,8 @@ namespace Nerv.Core.Sim
         {
             World w = World;
             w.EnsureTopology();
+            // Искра включает «режим пламени»: её тепло не сбрасывается термостатом мгновенно.
+            _lastExothermicTick = Tick;
             double r2 = c.Radius * c.Radius;
             for (int i = 0; i < w.AtomCount; i++)
             {
@@ -321,21 +349,50 @@ namespace Nerv.Core.Sim
             }
 
             // Расщепление связей на радикалы (гомолиз): выбираем случайные связи в радиусе.
+            // Если щёлкнули в пустоту — ищем молекулы чуть дальше (до двух радиусов).
             var candidates = new List<Bond>();
-            foreach (Bond b in w.Bonds)
-                if (b.IsFormed &&
-                    (w.Positions[b.Ia] - c.Center).LengthSquared <= r2 &&
-                    (w.Positions[b.Ib] - c.Center).LengthSquared <= r2)
-                    candidates.Add(b);
+            for (double reach = r2; candidates.Count == 0 && reach <= 4.0 * r2; reach *= 2.0)
+                foreach (Bond b in w.Bonds)
+                    if (b.IsFormed &&
+                        (w.Positions[b.Ia] - c.Center).LengthSquared <= reach &&
+                        (w.Positions[b.Ib] - c.Center).LengthSquared <= reach)
+                        candidates.Add(b);
 
-            for (int k = 0; k < c.Radicals && candidates.Count > 0; k++)
+            // Разные виды связей по очереди (H–H, O=O, …): в смеси искра даёт радикалы каждого сорта,
+            // иначе можно получить только атомы H, которые тут же снова соберутся в H₂.
+            var kinds = new List<List<Bond>>();
+            var kindIndex = new Dictionary<(int, int, int), int>();
+            foreach (Bond b in candidates)
             {
-                int pick = (int)(_rng.NextDouble() * candidates.Count);
-                Bond b = candidates[pick];
-                candidates.RemoveAt(pick);
+                int za = w.Elements[b.Ia].Z, zb = w.Elements[b.Ib].Z;
+                var key = (Math.Min(za, zb), Math.Max(za, zb), b.Order);
+                if (!kindIndex.TryGetValue(key, out int ki))
+                {
+                    kindIndex[key] = ki = kinds.Count;
+                    kinds.Add(new List<Bond>());
+                }
+                kinds[ki].Add(b);
+            }
+            int kindStart = kinds.Count == 0 ? 0 : (int)(_rng.NextDouble() * kinds.Count);
+
+            for (int k = 0, left = candidates.Count; k < c.Radicals && left > 0; k++)
+            {
+                List<Bond> pool = null;
+                for (int t = 0; t < kinds.Count && pool == null; t++)
+                {
+                    List<Bond> kl = kinds[(kindStart + k + t) % kinds.Count];
+                    if (kl.Count > 0) pool = kl;
+                }
+                int pick = (int)(_rng.NextDouble() * pool.Count);
+                Bond b = pool[pick];
+                pool.RemoveAt(pick);
+                left--;
                 int i = b.Ia, j = b.Ib;
 
-                if (b.Order > 1) w.SetBondOrder(b, b.Order - 1);
+                // Двухатомную молекулу (O₂, Cl₂) искра разбивает на атомы целиком — как в разряде;
+                // в многоатомных кратная связь лишь понижает порядок, чтобы не крошить молекулу.
+                bool diatomic = w.AdjacentBonds[i].Count == 1 && w.AdjacentBonds[j].Count == 1;
+                if (b.Order > 1 && !diatomic) w.SetBondOrder(b, b.Order - 1);
                 else w.RemoveBond(b);
                 Emit(SimEventType.BondBroken, b.A, b.B, b.Id);
                 _rules.ForbidRebond(b.A, b.B, Tick + SparkRebondCooldownTicks);

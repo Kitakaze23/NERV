@@ -31,6 +31,13 @@ namespace Nerv.Core.Sim
         public int[] Charges = Array.Empty<int>();
         public int[] FreeValences = Array.Empty<int>();
         public int[] LonePairs = Array.Empty<int>();
+        /// <summary>
+        /// Мгновенная «температура» атома по его кинетической энергии, K (m·v²/3k). Шумная —
+        /// для свечения пламени клиент сглаживает её во времени.
+        /// </summary>
+        public float[] Temperatures = Array.Empty<float>();
+        /// <summary>Идёт горение (недавно была экзотермическая реакция).</summary>
+        public bool FlameActive;
         /// <summary>Координаты x, y, z подряд, Å.</summary>
         public float[] Positions = Array.Empty<float>();
 
@@ -53,6 +60,8 @@ namespace Nerv.Core.Sim
             Array.Copy(Charges, dst.Charges, AtomCount);
             Array.Copy(FreeValences, dst.FreeValences, AtomCount);
             Array.Copy(LonePairs, dst.LonePairs, AtomCount);
+            Array.Copy(Temperatures, dst.Temperatures, AtomCount);
+            dst.FlameActive = FlameActive;
             Array.Copy(Positions, dst.Positions, AtomCount * 3);
             dst.Bonds.Clear();
             dst.Bonds.AddRange(Bonds);
@@ -69,6 +78,7 @@ namespace Nerv.Core.Sim
             Array.Resize(ref Charges, cap);
             Array.Resize(ref FreeValences, cap);
             Array.Resize(ref LonePairs, cap);
+            Array.Resize(ref Temperatures, cap);
             Array.Resize(ref Positions, cap * 3);
         }
     }

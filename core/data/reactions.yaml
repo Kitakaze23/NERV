@@ -117,6 +117,23 @@
     mechanism: chain
   tags: [горение, экзотермическая, цепная, радикалы]
 
+- id: h2_chain_ho2_h2
+  group: h2_combustion
+  name: Горение водорода — HO₂ + H₂
+  smarts: "[H:1][O:2][O;D1:3].[H:4][H:5]>>[H:1][O:2][O:3][H:4].[H:5]"
+  activationEnergy: 45
+  deltaH: 69
+  rate: 0.5
+  conditions:
+    medium: [vacuum]
+  effects: combustion_flash
+  education:
+    summary: "2H₂ + O₂ → 2H₂O"
+    textRu: "Малоактивный радикал HO₂ в горячем пламени отрывает атом водорода у H₂ — цепь продолжается."
+    level: school
+    mechanism: chain
+  tags: [горение, цепная, радикалы]
+
 # ---------- Горение метана: CH₄ + 2O₂ → CO₂ + 2H₂O ----------
 
 - id: ch4_combustion_1
@@ -191,7 +208,7 @@
   group: ch4_combustion
   name: Горение метана — CH₃ + O₂
   smarts: "[C;D3:1]([H:2])([H:3])[H:4].[O:5]=[O:6]>>[C:1]([H:2])([H:3])=[O:5].[O:6][H:4]"
-  activationEnergy: 30
+  activationEnergy: 15
   deltaH: -216
   rate: 0.5
   conditions:
@@ -205,6 +222,329 @@
   tags: [горение, экзотермическая, цепная, радикалы]
 
 # ---------- Натрий и хлор: 2Na + Cl₂ → 2NaCl ----------
+
+- id: ch4_chain_h
+  group: ch4_combustion
+  name: Горение метана — H + CH₄
+  smarts: "[H;D0:1].[C:2]([H:3])([H:4])([H:5])[H:6]>>[H:1][H:3].[C:2]([H:4])([H:5])[H:6]"
+  activationEnergy: 50
+  deltaH: 3
+  rate: 0.5
+  conditions:
+    medium: [vacuum]
+  effects: combustion_flash
+  education:
+    summary: "CH₄ + 2O₂ → CO₂ + 2H₂O"
+    textRu: "Горячий атом водорода отрывает водород у метана: получаются H₂ и метильный радикал."
+    level: school
+    mechanism: chain
+  tags: [горение, цепная, радикалы]
+
+- id: ch4_chain_ch2o_oh
+  group: ch4_combustion
+  name: Горение метана — CH₂O + OH
+  smarts: "[C:1]([H:2])([H:3])=[O:4].[O;D1:5][H:6]>>[C:1]([H:3])=[O:4].[H:2][O:5][H:6]"
+  activationEnergy: 5
+  deltaH: -126
+  rate: 0.5
+  conditions:
+    medium: [vacuum]
+  effects: combustion_flash
+  education:
+    summary: "CH₄ + 2O₂ → CO₂ + 2H₂O"
+    textRu: "Гидроксил отрывает водород у формальдегида: получаются вода и формильный радикал HCO."
+    level: school
+    mechanism: chain
+  tags: [горение, экзотермическая, цепная, радикалы]
+
+- id: ch4_chain_hco
+  group: ch4_combustion
+  name: Горение метана — HCO + O₂
+  smarts: "[C;D2:1]([H:2])=[O:3].[O:4]=[O:5]>>[C:1]=[O:3].[H:2][O:4][O;D1:5]"
+  activationEnergy: 5
+  deltaH: -138
+  rate: 0.5
+  conditions:
+    medium: [vacuum]
+  effects: combustion_flash
+  education:
+    summary: "CH₄ + 2O₂ → CO₂ + 2H₂O"
+    textRu: "Формильный радикал отдаёт водород кислороду: получается угарный газ CO."
+    level: school
+    mechanism: chain
+  tags: [горение, экзотермическая, цепная, радикалы]
+
+- id: ch4_chain_co_oh
+  group: ch4_combustion
+  name: Горение метана — CO + OH
+  smarts: "[C;D1:1]=[O:2].[O;D1:3][H:4]>>[O:3]=[C:1]=[O:2].[H:4]"
+  activationEnergy: 5
+  deltaH: -103
+  rate: 0.5
+  conditions:
+    medium: [vacuum]
+  effects: combustion_flash
+  education:
+    summary: "CH₄ + 2O₂ → CO₂ + 2H₂O"
+    textRu: "Угарный газ догорает: гидроксил отдаёт ему кислород — получается CO₂ и атом водорода."
+    level: school
+    mechanism: chain
+  tags: [горение, экзотермическая, цепная, радикалы]
+
+- id: ch4_chain_co_o
+  group: ch4_combustion
+  name: Горение метана — CO + O
+  smarts: "[C;D1:1]=[O:2].[O;D0:3]>>[O:3]=[C:1]=[O:2]"
+  activationEnergy: 15
+  deltaH: -532
+  rate: 0.5
+  conditions:
+    medium: [vacuum]
+  effects: combustion_flash
+  education:
+    summary: "CH₄ + 2O₂ → CO₂ + 2H₂O"
+    textRu: "Угарный газ присоединяет атом кислорода — получается углекислый газ."
+    level: school
+    mechanism: chain
+  tags: [горение, экзотермическая, цепная, радикалы]
+
+- id: ch4_chain_ch3o
+  group: ch4_combustion
+  name: Горение метана — CH₃O + O₂
+  smarts: "[C:1]([H:2])([H:3])([H:4])[O;D1:5].[O:6]=[O:7]>>[C:1]([H:2])([H:3])=[O:5].[H:4][O:6][O;D1:7]"
+  activationEnergy: 10
+  deltaH: -110
+  rate: 0.5
+  conditions:
+    medium: [vacuum]
+  effects: combustion_flash
+  education:
+    summary: "CH₄ + 2O₂ → CO₂ + 2H₂O"
+    textRu: "Метоксильный радикал отдаёт водород кислороду и превращается в формальдегид."
+    level: school
+    mechanism: chain
+  tags: [горение, экзотермическая, цепная, радикалы]
+
+- id: ch4_chain_methanol
+  group: ch4_combustion
+  name: Горение метана — CH₃OH + OH
+  smarts: "[C:1]([H:2])([H:3])([H:4])[O:5][H:6].[O;D1:7][H:8]>>[C:1]([H:2])([H:3])=[O:5].[H:4][O:7][H:8].[H:6]"
+  activationEnergy: 20
+  deltaH: 22
+  rate: 0.5
+  conditions:
+    medium: [vacuum]
+  effects: combustion_flash
+  education:
+    summary: "CH₄ + 2O₂ → CO₂ + 2H₂O"
+    textRu: "Метанол, образовавшийся в пламени, окисляется гидроксилом до формальдегида."
+    level: school
+    mechanism: chain
+  tags: [горение, цепная, радикалы]
+
+- id: ch4_chain_ch3o2
+  group: ch4_combustion
+  name: Горение метана — CH₃OO + H
+  smarts: "[C:1][O:2][O;D1:3].[H;D0:4]>>[C:1][O;D1:2].[O:3][H:4]"
+  activationEnergy: 5
+  deltaH: -150
+  rate: 0.5
+  conditions:
+    medium: [vacuum]
+  effects: combustion_flash
+  education:
+    summary: "CH₄ + 2O₂ → CO₂ + 2H₂O"
+    textRu: "Метилпероксильный радикал распадается при встрече с атомом водорода на CH₃O и OH."
+    level: school
+    mechanism: chain
+  tags: [горение, экзотермическая, цепная, радикалы]
+
+- id: h2_chain_ho2_ho2
+  group: h2_combustion
+  name: Горение водорода — HO₂ + HO₂
+  smarts: "[H:1][O:2][O;D1:3].[H:4][O:5][O;D1:6]>>[H:1][O:2][O:3][H:4].[O:5]=[O:6]"
+  activationEnergy: 5
+  deltaH: -165
+  rate: 0.5
+  conditions:
+    medium: [vacuum]
+  effects: combustion_flash
+  education:
+    summary: "2H₂ + O₂ → 2H₂O"
+    textRu: "Два радикала HO₂ обмениваются водородом: пероксид водорода и кислород."
+    level: school
+    mechanism: chain
+  tags: [горение, экзотермическая, цепная, радикалы]
+
+- id: h2_chain_h2o2_oh
+  group: h2_combustion
+  name: Горение водорода — H₂O₂ + OH
+  smarts: "[H:1][O:2][O:3][H:4].[O;D1:5][H:6]>>[H:1][O:2][O;D1:3].[H:4][O:5][H:6]"
+  activationEnergy: 5
+  deltaH: -130
+  rate: 0.5
+  conditions:
+    medium: [vacuum]
+  effects: combustion_flash
+  education:
+    summary: "2H₂ + O₂ → 2H₂O"
+    textRu: "Гидроксил отрывает водород у пероксида: вода и радикал HO₂."
+    level: school
+    mechanism: chain
+  tags: [горение, экзотермическая, цепная, радикалы]
+
+- id: ch4_chain_formic
+  group: ch4_combustion
+  name: Горение метана — HCOOH + OH
+  smarts: "[H:1][C:2](=[O:3])[O:4][H:5].[O;D1:6][H:7]>>[O:3]=[C:2]=[O:4].[H:1][O:6][H:7].[H:5]"
+  activationEnergy: 10
+  deltaH: -77
+  rate: 0.5
+  conditions:
+    medium: [vacuum]
+  effects: combustion_flash
+  education:
+    summary: "CH₄ + 2O₂ → CO₂ + 2H₂O"
+    textRu: "Муравьиная кислота, промежуточный продукт пламени, догорает до CO₂ и воды."
+    level: school
+    mechanism: chain
+  tags: [горение, экзотермическая, цепная, радикалы]
+
+- id: ch4_chain_hoco
+  group: ch4_combustion
+  name: Горение метана — HOCO + O₂
+  smarts: "[C;D2:1](=[O:2])[O:3][H:4].[O:5]=[O:6]>>[O:2]=[C:1]=[O:3].[H:4][O:5][O;D1:6]"
+  activationEnergy: 5
+  deltaH: -170
+  rate: 0.5
+  conditions:
+    medium: [vacuum]
+  effects: combustion_flash
+  education:
+    summary: "CH₄ + 2O₂ → CO₂ + 2H₂O"
+    textRu: "Радикал HOCO отдаёт водород кислороду — остаётся углекислый газ."
+    level: school
+    mechanism: chain
+  tags: [горение, экзотермическая, цепная, радикалы]
+
+- id: ch4_chain_hoco_oh
+  group: ch4_combustion
+  name: Горение метана — HOCO + OH
+  smarts: "[C;D2:1](=[O:2])[O:3][H:4].[O;D1:5][H:6]>>[O:2]=[C:1]=[O:3].[H:4][O:5][H:6]"
+  activationEnergy: 5
+  deltaH: -400
+  rate: 0.5
+  conditions:
+    medium: [vacuum]
+  effects: combustion_flash
+  education:
+    summary: "CH₄ + 2O₂ → CO₂ + 2H₂O"
+    textRu: "Радикал HOCO встречает гидроксил: углекислый газ и вода."
+    level: school
+    mechanism: chain
+  tags: [горение, экзотермическая, цепная, радикалы]
+
+- id: h2_chain_oh_ho2
+  group: h2_combustion
+  name: Горение водорода — OH + HO₂
+  smarts: "[O;D1:1][H:2].[H:3][O:4][O;D1:5]>>[H:2][O:1][H:3].[O:4]=[O:5]"
+  activationEnergy: 2
+  deltaH: -290
+  rate: 0.5
+  conditions:
+    medium: [vacuum]
+  effects: combustion_flash
+  education:
+    summary: "2H₂ + O₂ → 2H₂O"
+    textRu: "Гидроксил и HO₂ встречаются: вода и кислород — так пламя гасит радикалы."
+    level: school
+    mechanism: chain
+  tags: [горение, экзотермическая, цепная, радикалы]
+
+- id: h2_chain_o_oh
+  group: h2_combustion
+  name: Горение водорода — O + OH
+  smarts: "[O;D0:1].[O;D1:2][H:3]>>[O:1]=[O:2].[H:3]"
+  activationEnergy: 2
+  deltaH: -70
+  rate: 0.5
+  conditions:
+    medium: [vacuum]
+  effects: combustion_flash
+  education:
+    summary: "2H₂ + O₂ → 2H₂O"
+    textRu: "Атом кислорода забирает кислород у гидроксила: молекула O₂ и атом водорода."
+    level: school
+    mechanism: chain
+  tags: [горение, экзотермическая, цепная, радикалы]
+
+- id: h2_chain_o_ho2
+  group: h2_combustion
+  name: Горение водорода — O + HO₂
+  smarts: "[O;D0:1].[H:2][O:3][O;D1:4]>>[O:1][H:2].[O:3]=[O:4]"
+  activationEnergy: 2
+  deltaH: -226
+  rate: 0.5
+  conditions:
+    medium: [vacuum]
+  effects: combustion_flash
+  education:
+    summary: "2H₂ + O₂ → 2H₂O"
+    textRu: "Атом кислорода отрывает водород у HO₂: гидроксил и кислород."
+    level: school
+    mechanism: chain
+  tags: [горение, экзотермическая, цепная, радикалы]
+
+- id: ch4_chain_hco_oh
+  group: ch4_combustion
+  name: Горение метана — HCO + OH
+  smarts: "[C;D2:1]([H:2])=[O:3].[O;D1:4][H:5]>>[C:1]=[O:3].[H:2][O:4][H:5]"
+  activationEnergy: 2
+  deltaH: -370
+  rate: 0.5
+  conditions:
+    medium: [vacuum]
+  effects: combustion_flash
+  education:
+    summary: "CH₄ + 2O₂ → CO₂ + 2H₂O"
+    textRu: "Формильный радикал отдаёт водород гидроксилу: угарный газ и вода."
+    level: school
+    mechanism: chain
+  tags: [горение, экзотермическая, цепная, радикалы]
+
+- id: ch4_chain_co_ho2
+  group: ch4_combustion
+  name: Горение метана — CO + HO₂
+  smarts: "[C;D1:1]=[O:2].[H:3][O:4][O;D1:5]>>[O:5]=[C:1]=[O:2].[O:4][H:3]"
+  activationEnergy: 25
+  deltaH: -260
+  rate: 0.5
+  conditions:
+    medium: [vacuum]
+  effects: combustion_flash
+  education:
+    summary: "CH₄ + 2O₂ → CO₂ + 2H₂O"
+    textRu: "Угарный газ забирает кислород у HO₂ и становится углекислым."
+    level: school
+    mechanism: chain
+  tags: [горение, экзотермическая, цепная, радикалы]
+
+- id: ch4_chain_co_o2
+  group: ch4_combustion
+  name: Горение метана — CO + O₂
+  smarts: "[C;D1:1]=[O:2].[O:3]=[O:4]>>[O:3]=[C:1]=[O:2].[O:4]"
+  activationEnergy: 80
+  deltaH: -33
+  rate: 0.5
+  conditions:
+    medium: [vacuum]
+  effects: combustion_flash
+  education:
+    summary: "CH₄ + 2O₂ → CO₂ + 2H₂O"
+    textRu: "В горячем пламени угарный газ медленно догорает в кислороде. Если кислорода или жара мало — CO остаётся: так получается угарный газ при плохой тяге."
+    level: school
+    mechanism: chain
+  tags: [горение, экзотермическая, цепная, радикалы]
 
 - id: na_cl2_1
   group: na_cl2

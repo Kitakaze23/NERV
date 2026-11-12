@@ -469,14 +469,14 @@ namespace Nerv.Core.Sim
         }
 
         /// <summary>Добавить (kcal &gt; 0) или отнять кинетическую энергию у атомов вокруг точки.</summary>
-        private static void AddHeat(Simulation sim, Vec3 center, double kcal)
+        internal static void AddHeat(Simulation sim, Vec3 center, double kcal, int excludeA = -1, int excludeB = -1)
         {
             if (kcal == 0) return;
             World w = sim.World;
             var atoms = new List<int>();
             double r2 = HeatRadius * HeatRadius;
             for (int i = 0; i < w.AtomCount; i++)
-                if ((w.Positions[i] - center).LengthSquared < r2) atoms.Add(i);
+                if (i != excludeA && i != excludeB && (w.Positions[i] - center).LengthSquared < r2) atoms.Add(i);
             if (atoms.Count == 0) return;
 
             if (kcal > 0)
