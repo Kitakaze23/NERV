@@ -29,3 +29,6 @@ crashlytics-build.properties
 # --- ОС ---
 .DS_Store
 Thumbs.db
+
+# Unity создаёт .meta внутри локального пакета ядра — они не нужны в git
+core/**/*.meta

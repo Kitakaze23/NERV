@@ -1,0 +1,174 @@
+using Nerv.Core.Data;
+using Nerv.Core.Model;
+using Nerv.Core.Numerics;
+using Nerv.Core.Sim;
+using UnityEngine;
+
+namespace Nerv.Client
+{
+    public enum NervTool
+    {
+        /// <summary>Схватить и тащить атом (пружина, а не телепорт).</summary>
+        Hand,
+        /// <summary>Поставить атом выбранного элемента.</summary>
+        Place,
+        /// <summary>Искра: нагрев + радикалы.</summary>
+        Spark,
+        /// <summary>Удалить атом.</summary>
+        Erase
+    }
+
+    /// <summary>
+    /// Слой намерений: «схватить», «потянуть», «поставить атом», «искра».
+    /// Получает луч из камеры (на десктопе — от мыши; в VR будет луч контроллера) и превращает
+    /// его в команды ядра.
+    /// </summary>
+    public sealed class NervInteraction : MonoBehaviour
+    {
+        public NervTool Tool = NervTool.Hand;
+        public string Element = "H";
+
+        private MoleculeView _view;
+        private AtomId _grabbed = AtomId.None;
+        private float _grabDepth;
+        private LineRenderer _spring;
+
+        public static readonly string[] Palette = { "H", "C", "N", "O", "Na", "Cl", "S", "F" };
+
+        private void Start()
+        {
+            _view = GetComponent<MoleculeView>();
+            var go = new GameObject("Grab Spring");
+            go.transform.SetParent(transform, false);
+            _spring = go.AddComponent<LineRenderer>();
+            Shader unlit = Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Unlit/Color");
+            var m = new Material(unlit);
+            m.SetColor("_BaseColor", NervEnvironment.Energy * 1.5f);
+            m.color = NervEnvironment.Energy * 1.5f;
+            _spring.material = m;
+            _spring.widthMultiplier = 0.004f;
+            _spring.positionCount = 0;
+            _spring.shadowCastingMode = UnityEngine.Rendering.ShadowCastingMode.Off;
+        }
+
+        private void Update()
+        {
+            NervApp app = NervApp.Instance;
+            if (app == null) return;
+            Camera cam = NervEnvironment.MainCamera;
+
+            int digit = NervInput.DigitPressed;
+            if (digit >= 1 && digit <= Palette.Length)
+            {
+                Element = Palette[digit - 1];
+                Tool = NervTool.Place;
+            }
+            if (NervInput.EscapePressed) Tool = NervTool.Hand;
+            if (NervInput.SpacePressed) app.Paused = !app.Paused;
+
+            Ray ray = cam.ScreenPointToRay(NervInput.PointerPosition);
+            bool overUi = NervHud.PointerOverUi;
+            int hit = overUi ? -1 : Pick(app, ray);
+            _view.HoverIndex = (Tool == NervTool.Hand || Tool == NervTool.Erase) ? hit : -1;
+
+            bool click = NervInput.LeftPressed && !overUi && !NervInput.AltHeld;
+            if (click)
+            {
+                switch (Tool)
+                {
+                    case NervTool.Hand:
+                        if (hit >= 0)
+                        {
+                            _grabbed = app.Snapshot.Ids[hit];
+                            Vector3 p = app.AtomWorld(hit);
+                            _grabDepth = Vector3.Dot(p - cam.transform.position, cam.transform.forward);
+                            app.Submit(new Grab(_grabbed, NervApp.ToSim(p)));
+                        }
+                        break;
+                    case NervTool.Place:
+                        app.Submit(new AddAtom(Element, NervApp.ToSim(PlanePoint(cam, ray, app))));
+                        break;
+                    case NervTool.Spark:
+                        app.Submit(new Spark(NervApp.ToSim(hit >= 0 ? app.AtomWorld(hit) : PlanePoint(cam, ray, app)), radius: 4, kelvin: 6000));
+                        NervEffects.Instance?.SparkFlash(hit >= 0 ? app.AtomWorld(hit) : PlanePoint(cam, ray, app));
+                        break;
+                    case NervTool.Erase:
+                        if (hit >= 0) app.Submit(new RemoveAtom(app.Snapshot.Ids[hit]));
+                        break;
+                }
+            }
+
+            UpdateGrab(app, cam, ray);
+        }
+
+        private void UpdateGrab(NervApp app, Camera cam, Ray ray)
+        {
+            int idx = IndexOf(app.Snapshot, _grabbed);
+            if (_grabbed.IsNone || idx < 0)
+            {
+                _grabbed = AtomId.None;
+                _view.GrabbedIndex = -1;
+                _spring.positionCount = 0;
+                return;
+            }
+
+            // Цель — на плоскости, параллельной экрану, на глубине схваченного атома.
+            Vector3 target = ray.origin + ray.direction * (_grabDepth / Mathf.Max(0.05f, Vector3.Dot(ray.direction, cam.transform.forward)));
+            if (NervInput.LeftHeld)
+            {
+                app.Submit(new MoveGrab(NervApp.ToSim(target)));
+                _view.GrabbedIndex = idx;
+                _spring.positionCount = 2;
+                _spring.SetPosition(0, app.AtomWorld(idx));
+                _spring.SetPosition(1, target);
+            }
+            else
+            {
+                app.Submit(new Release());
+                _grabbed = AtomId.None;
+                _view.GrabbedIndex = -1;
+                _spring.positionCount = 0;
+            }
+        }
+
+        /// <summary>Точка на плоскости через центр сцены, перпендикулярной взгляду.</summary>
+        private static Vector3 PlanePoint(Camera cam, Ray ray, NervApp app)
+        {
+            Vector3 center = cam.GetComponent<NervCameraController>()?.Target ?? Vector3.zero;
+            var plane = new Plane(-cam.transform.forward, center);
+            return plane.Raycast(ray, out float d) ? ray.GetPoint(d) : center;
+        }
+
+        /// <summary>Ближайший атом, в который попадает луч (без коллайдеров — по снимку).</summary>
+        public static int Pick(NervApp app, Ray ray)
+        {
+            WorldSnapshot snap = app.Snapshot;
+            int best = -1;
+            float bestT = float.MaxValue;
+            for (int i = 0; i < snap.AtomCount; i++)
+            {
+                Vector3 c = app.AtomWorld(i);
+                float r = MoleculeView.VisualRadius(ElementTable.Get(snap.AtomicNumbers[i])) * NervApp.MetersPerAngstrom * 1.3f;
+                Vector3 oc = ray.origin - c;
+                float b = Vector3.Dot(oc, ray.direction);
+                float cc = oc.sqrMagnitude - r * r;
+                float disc = b * b - cc;
+                if (disc < 0) continue;
+                float t = -b - Mathf.Sqrt(disc);
+                if (t > 0 && t < bestT)
+                {
+                    bestT = t;
+                    best = i;
+                }
+            }
+            return best;
+        }
+
+        public static int IndexOf(WorldSnapshot snap, AtomId id)
+        {
+            if (id.IsNone) return -1;
+            for (int i = 0; i < snap.AtomCount; i++) if (snap.Ids[i] == id) return i;
+            return -1;
+        }
+    }
+}
