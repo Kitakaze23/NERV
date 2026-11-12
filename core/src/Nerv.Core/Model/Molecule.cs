@@ -22,7 +22,9 @@ namespace Nerv.Core.Model
         /// <summary>Сведения об ионе, если частица заряжена и есть в таблице ионов.</summary>
         public IonInfo Ion { get; internal set; }
         /// <summary>Название для интерфейса или null («неизвестное соединение»).</summary>
-        public string Name => Compound?.NameRu ?? Ion?.NameRu;
+        public string Name => Compound?.NameRu ?? Ion?.NameRu ?? AtomName;
+        /// <summary>Для одиночного нейтрального атома без записи в базе: «Натрий (атом)».</summary>
+        public string AtomName { get; internal set; }
 
         internal Molecule(IReadOnlyList<AtomId> atoms, string formula, int charge, int bondCount)
         {

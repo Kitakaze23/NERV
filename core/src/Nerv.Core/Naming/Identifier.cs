@@ -35,7 +35,12 @@ namespace Nerv.Core.Naming
                 m.CanonicalKey = key;
                 m.Compound = data?.Compounds.Find(key);
                 m.Ion = m.Charge != 0 ? data?.Ions.Find(key) : null;
-                if (m.Name == null) continue;
+                if (m.Compound == null && m.Ion == null)
+                {
+                    // Одиночный атом без записи в базе — называем по элементу, но не объявляем в журнале.
+                    if (m.Atoms.Count == 1 && m.Charge == 0) m.AtomName = w.GetElement(m.Atoms[0]).NameRu + " (атом)";
+                    continue;
+                }
 
                 string sig = key + "@" + MinAtom(m.Atoms);
                 seen.Add(sig);

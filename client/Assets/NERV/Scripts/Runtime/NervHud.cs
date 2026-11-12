@@ -48,9 +48,39 @@ namespace Nerv.Client
             foreach (SimEvent e in app.Events)
                 if (e.Type == SimEventType.MoleculeIdentified && e.Text != null && !e.Text.StartsWith("Атомарный"))
                     Log("Опознано: " + e.Text, NervEnvironment.Energy);
+            RebuildSubstances(app.Snapshot);
             foreach (ReactionRecord r in app.Reactions)
                 Log(r.Reaction.Name + (r.Reaction.DeltaHKj < 0 ? "  · " + (-r.Reaction.DeltaHKj).ToString("0") + " кДж/моль" : ""),
                     r.Reaction.DeltaHKj < 0 ? NervEnvironment.Heat : NervEnvironment.Cold);
+        }
+
+        private readonly List<string> _substances = new List<string>();
+        private readonly HashSet<AtomId> _grouped = new HashSet<AtomId>();
+        private readonly List<Rect> _placedTags = new List<Rect>();
+
+        private void RebuildSubstances(WorldSnapshot snap)
+        {
+            _substances.Clear();
+            _grouped.Clear();
+            foreach (IonicGroup g in snap.IonicGroups)
+                foreach (Molecule m in g.Members)
+                    foreach (AtomId id in m.Atoms) _grouped.Add(id);
+            var counts = new Dictionary<string, int>();
+            foreach (Molecule m in snap.Molecules)
+            {
+                if (m.Charge != 0 && _grouped.Contains(m.Atoms[0])) continue; // ион уже учтён в составе соли
+                string key = (m.Name ?? "неизвестное соединение") + "  " + FormulaText.Subscript(m.Formula) + FormulaText.ChargeSuperscript(m.Charge);
+                counts.TryGetValue(key, out int c);
+                counts[key] = c + 1;
+            }
+            foreach (IonicGroup g in snap.IonicGroups)
+            {
+                string key = (g.Name ?? "ионное соединение") + "  " + FormulaText.Subscript(g.Formula) + (g.Members.Count <= 2 ? "  (ионная пара)" : "  (кристалл)");
+                counts.TryGetValue(key, out int c);
+                counts[key] = c + 1;
+            }
+            foreach (KeyValuePair<string, int> kv in counts.OrderByDescending(k => k.Value).ThenBy(k => k.Key).Take(14))
+                _substances.Add((kv.Value > 1 ? kv.Value + " × " : "") + kv.Key);
         }
 
         private void Log(string text, Color color)
@@ -188,25 +218,9 @@ namespace Nerv.Client
 
             GUILayout.Space(8);
             GUILayout.Label("ВЕЩЕСТВА В СЦЕНЕ", _small);
-            var counts = new SortedDictionary<string, int>();
-            foreach (Molecule m in snap.Molecules)
-            {
-                string key = (m.Name ?? "неизвестное соединение") + "  " + FormulaText.Subscript(m.Formula) + FormulaText.ChargeSuperscript(m.Charge);
-                counts.TryGetValue(key, out int c);
-                counts[key] = c + 1;
-            }
-            foreach (IonicGroup g in snap.IonicGroups)
-            {
-                string key = (g.Name ?? "ионное соединение") + "  " + FormulaText.Subscript(g.Formula) + "  (кристалл)";
-                counts.TryGetValue(key, out int c);
-                counts[key] = c + 1;
-            }
-            int shown = 0;
-            foreach (KeyValuePair<string, int> kv in counts.OrderByDescending(k => k.Value))
-            {
-                if (shown++ >= 14) break;
-                GUILayout.Label((kv.Value > 1 ? kv.Value + " × " : "") + kv.Key, _label);
-            }
+            // Список собирается в Update: имена молекул дописывает поток симуляции, и между событиями
+            // Layout и Repaint одного кадра он не должен меняться (иначе IMGUI ругается на «Invalid GUILayout state»).
+            foreach (string line in _substances) GUILayout.Label(line, _label);
             GUILayout.EndArea();
         }
 
@@ -244,20 +258,25 @@ namespace Nerv.Client
             _index.Clear();
             for (int i = 0; i < snap.AtomCount; i++) _index[snap.Ids[i]] = i;
 
+            _placedTags.Clear();
+
+            // Сначала соли (они «главнее» своих ионов), потом молекулы.
+            foreach (IonicGroup g in snap.IonicGroups)
+            {
+                var atoms = new List<AtomId>();
+                foreach (Molecule m in g.Members) atoms.AddRange(m.Atoms);
+                DrawTag(app, cam, atoms, (g.Name ?? "?") + "  " + FormulaText.Subscript(g.Formula), g.Name == null, 0.5f);
+            }
+
             int drawn = 0;
             foreach (Molecule m in snap.Molecules)
             {
                 if (drawn >= 40) break;
                 bool ion = m.Charge != 0;
                 if (m.Atoms.Count < 2 && !ion) continue;
+                if (ion && _grouped.Contains(m.Atoms[0])) continue; // ион уже подписан в составе соли
                 string text = (m.Name ?? "?") + "  " + FormulaText.Subscript(m.Formula) + FormulaText.ChargeSuperscript(m.Charge);
                 if (DrawTag(app, cam, m.Atoms, text, m.Name == null)) drawn++;
-            }
-            foreach (IonicGroup g in snap.IonicGroups)
-            {
-                var atoms = new List<AtomId>();
-                foreach (Molecule m in g.Members) atoms.AddRange(m.Atoms);
-                DrawTag(app, cam, atoms, (g.Name ?? "?") + "  " + FormulaText.Subscript(g.Formula), g.Name == null, 0.5f);
             }
         }
 
@@ -291,7 +310,12 @@ namespace Nerv.Client
             // Не даём подписи уйти за край экрана.
             float x = Mathf.Clamp(g.x - size.x / 2, 4, Screen.width / _uiScale - size.x - 4);
             float yTop = Mathf.Clamp(g.y - size.y - 4, 4, Screen.height / _uiScale - size.y - 4);
-            GUI.Label(new Rect(x, yTop, size.x, size.y), text, _tag);
+            // Раздвигаем пересекающиеся подписи: сдвигаем вверх, пока не найдётся свободное место.
+            var rect = new Rect(x, yTop, size.x, size.y);
+            for (int tries = 0; tries < 6 && _placedTags.Any(o => o.Overlaps(rect)); tries++)
+                rect.y -= size.y + 2;
+            _placedTags.Add(rect);
+            GUI.Label(rect, text, _tag);
             GUI.color = prev;
             return true;
         }

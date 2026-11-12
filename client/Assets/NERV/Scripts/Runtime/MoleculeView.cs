@@ -52,8 +52,8 @@ namespace Nerv.Client
                 MakeAdditive(_highlightMaterial);
             }
             // Ореолы ионов: катион — тёплый, анион — холодный (как «плюс» и «минус» на схемах).
-            _cationMaterial = MakeHalo(new Color(1f, 0.45f, 0.25f), 1.1f, 0.18f);
-            _anionMaterial = MakeHalo(new Color(0.3f, 0.6f, 1f), 1.1f, 0.18f);
+            _cationMaterial = MakeHalo(new Color(1f, 0.45f, 0.25f), 0.9f, 0.18f);
+            _anionMaterial = MakeHalo(new Color(0.3f, 0.6f, 1f), 0.9f, 0.18f);
 
             Shader unlit = Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Unlit/Color");
             _lineMaterial = new Material(unlit);
@@ -204,7 +204,7 @@ namespace Nerv.Client
                 if (q != 0)
                 {
                     // Ореол растёт с величиной заряда: Ca²⁺ заметнее Na⁺.
-                    float k = 2f * r * (1.9f + 0.25f * Mathf.Min(Mathf.Abs(q) - 1, 2));
+                    float k = 2f * r * (1.6f + 0.2f * Mathf.Min(Mathf.Abs(q) - 1, 2));
                     (q > 0 ? _cations : _anions).Add(Matrix4x4.TRS(p, Quaternion.identity, Vector3.one * k));
                 }
                 if (snap.FreeValences[i] > 0) AddValenceDots(app, snap, i, p, r);
