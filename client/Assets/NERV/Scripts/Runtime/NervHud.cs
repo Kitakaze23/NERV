@@ -30,7 +30,7 @@ namespace Nerv.Client
         private const float LogLife = 14f;
         private readonly List<LogEntry> _log = new List<LogEntry>();
         private readonly Dictionary<AtomId, int> _index = new Dictionary<AtomId, int>();
-        private GUIStyle _flameStyle;
+        private GUIStyle _flameStyle, _cardTitle;
         private GUIStyle _panel, _title, _label, _small, _button, _active, _tag, _logStyle;
         private Texture2D _panelTex, _buttonTex, _activeTex, _tagTex;
         private float _uiScale = 1f;
@@ -51,8 +51,7 @@ namespace Nerv.Client
                     Log("Опознано: " + e.Text, NervEnvironment.Energy);
             RebuildSubstances(app.Snapshot);
             foreach (ReactionRecord r in app.Reactions)
-                Log(r.Reaction.Name + (r.Reaction.DeltaHKj < 0 ? "  · " + (-r.Reaction.DeltaHKj).ToString("0") + " кДж/моль" : ""),
-                    r.Reaction.DeltaHKj < 0 ? NervEnvironment.Heat : NervEnvironment.Cold);
+                Log(NervDirector.Equation(r), r.Reaction.DeltaHKj < 0 ? NervEnvironment.Heat : NervEnvironment.Cold);
         }
 
         private readonly List<string> _substances = new List<string>();
@@ -114,6 +113,7 @@ namespace Nerv.Client
             DrawLeft(app, h);
             DrawRight(app, w, h);
             DrawLog(h);
+            DrawCard(w);
 
             if (app.DataError != null)
                 GUI.Label(new Rect(240, 16, w - 520, 40), app.DataError, _label);
@@ -213,6 +213,12 @@ namespace Nerv.Client
             if (GUILayout.Button(app.Paused ? "Продолжить" : "Пауза", _button)) app.Paused = !app.Paused;
             if (GUILayout.Button("Очистить", _button)) app.ClearAtoms();
             GUILayout.EndHorizontal();
+            if (NervDirector.Instance != null)
+            {
+                bool slow = NervDirector.Instance.SlowMotion;
+                if (GUILayout.Button((slow ? "✓ " : "   ") + "Замедлять новые реакции", slow ? _active : _button))
+                    NervDirector.Instance.SlowMotion = !slow;
+            }
 
             GUILayout.Space(6);
             GUILayout.Label("Атомов: " + snap.AtomCount + "   ·   " + (snap.Tick * 0.5 / 1000.0).ToString("0.0") + " пс", _small);
@@ -252,6 +258,32 @@ namespace Nerv.Client
         }
 
         private static string LogText(LogEntry e) => e.Count > 1 ? e.Text + "   ×" + e.Count : e.Text;
+
+        // ================= Карточка шага реакции =================
+
+        private void DrawCard(float w)
+        {
+            NervDirector d = NervDirector.Instance;
+            NervDirector.Card c = d != null ? d.Current : null;
+            if (c == null || d.CardAlpha <= 0.01f) return;
+
+            const float width = 440f;
+            var x = (w - width) / 2f;
+            Color prev = GUI.color;
+            GUI.color = new Color(1, 1, 1, d.CardAlpha);
+            GUILayout.BeginArea(new Rect(x, 16, width, 320));
+            GUILayout.BeginVertical(_panel);
+            _cardTitle.normal.textColor = c.Accent;
+            GUILayout.Label((d.IsSlowed ? "▶ ЗАМЕДЛЕНИЕ · " : "") + "НОВЫЙ ШАГ · " + c.Title.ToUpperInvariant(), _small);
+            GUILayout.Label(c.Equation, _cardTitle);
+            GUILayout.Label(c.Energy, _label);
+            if (!string.IsNullOrEmpty(c.Text)) GUILayout.Label(c.Text, _label);
+            if (!string.IsNullOrEmpty(c.Summary))
+                GUILayout.Label("Итог процесса: " + c.Summary + (c.Simplified ? "   ·   упрощённый механизм" : ""), _small);
+            GUILayout.EndVertical();
+            GUILayout.EndArea();
+            GUI.color = prev;
+        }
 
         // ================= Подписи над молекулами =================
 
@@ -354,6 +386,7 @@ namespace Nerv.Client
             _tag.normal.textColor = Color.white;
             _logStyle = new GUIStyle(GUI.skin.label) { fontSize = 13, wordWrap = false };
             _flameStyle = new GUIStyle(GUI.skin.label) { fontSize = 13, fontStyle = FontStyle.Bold };
+            _cardTitle = new GUIStyle(GUI.skin.label) { fontSize = 20, fontStyle = FontStyle.Bold, wordWrap = true };
         }
 
         private static Texture2D Tex(Color c)

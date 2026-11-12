@@ -19,6 +19,10 @@ namespace Nerv.Core.Sim
         public Vec3 Position { get; internal set; }
         /// <summary>Эффективная температура столкновения, K.</summary>
         public double CollisionTemperature { get; internal set; }
+        /// <summary>Брутто-формулы (Хилл) и заряды частиц до реакции — «уравнение шага» в журнале и карточке.</summary>
+        public IReadOnlyList<(string Formula, int Charge)> Reactants { get; internal set; } = Array.Empty<(string, int)>();
+        /// <summary>Частицы, в которые перешли атомы реакции.</summary>
+        public IReadOnlyList<(string Formula, int Charge)> Products { get; internal set; } = Array.Empty<(string, int)>();
 
         public override string ToString() => "[" + Tick + "] " + Reaction.Id + (Reaction.Summary != null ? " (" + Reaction.Summary + ")" : "");
     }
@@ -331,6 +335,9 @@ namespace Nerv.Core.Sim
             // Шаблон меняет связи мгновенно, и фрагменты могут оказаться «внутри» друг друга;
             // этот артефакт компенсируем, чтобы реакция не выделяла больше заданной доли −ΔH.
             double before = ForceField.ComputeCached(w, sim.Settings);
+            var mappedIds = new HashSet<AtomId>();
+            foreach (int i in mapping.Values) mappedIds.Add(w.IdAt(i));
+            List<(string, int)> reactants = Participants(w, mappedIds);
 
             var pairs = new SortedSet<long>(t.ReactantBonds.Keys);
             pairs.UnionWith(t.ProductBonds.Keys);
@@ -380,7 +387,11 @@ namespace Nerv.Core.Sim
 
             var map = new SortedDictionary<int, AtomId>();
             foreach (KeyValuePair<int, int> kv in mapping) map[kv.Key] = w.IdAt(kv.Value);
-            var record = new ReactionRecord { Tick = sim.Tick, Reaction = t, AtomMap = map, Position = center, CollisionTemperature = tEff };
+            var record = new ReactionRecord
+            {
+                Tick = sim.Tick, Reaction = t, AtomMap = map, Position = center, CollisionTemperature = tEff,
+                Reactants = reactants, Products = Participants(w, mappedIds)
+            };
             int index = sim.AddReactionRecord(record);
 
             AtomId first = map.Count > 0 ? map[FirstKey(map)] : AtomId.None;
@@ -454,6 +465,20 @@ namespace Nerv.Core.Sim
                             }
                 if (!moved) break;
             }
+        }
+
+        /// <summary>Молекулы, в которых есть атомы реакции (в порядке обхода — детерминированно).</summary>
+        private static List<(string, int)> Participants(World w, HashSet<AtomId> ids)
+        {
+            var list = new List<(string, int)>();
+            foreach (Molecule m in w.Molecules)
+                foreach (AtomId a in m.Atoms)
+                    if (ids.Contains(a))
+                    {
+                        list.Add((m.Formula, m.Charge));
+                        break;
+                    }
+            return list;
         }
 
         /// <summary>Отнять до amount (а.е.м.·Å²/фс²) кинетической энергии у атомов; возвращает, сколько отнято.</summary>

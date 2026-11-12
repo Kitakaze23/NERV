@@ -36,6 +36,16 @@ namespace Nerv.Core.Sim
             set => _paused = value;
         }
 
+        /// <summary>
+        /// Множитель скорости показа (замедление в момент реакции и т. п.). В отличие от команды
+        /// SetTimeScale не пишется в журнал: на ход симуляции по тикам не влияет, только на темп.
+        /// </summary>
+        public double PlaybackFactor
+        {
+            get => Volatile.Read(ref _playback);
+            set => Volatile.Write(ref _playback, Math.Max(0.0, value));
+        }
+
         public bool IsRunning => _thread != null;
 
         private readonly object _lock = new object();
@@ -47,6 +57,7 @@ namespace Nerv.Core.Sim
         private WorldSnapshot _staging = new WorldSnapshot();
         private int _publishedReactions;
         private double _tickDebt;
+        private double _playback = 1.0;
         private volatile bool _paused;
         private volatile bool _running;
         private Thread _thread;
@@ -123,7 +134,7 @@ namespace Nerv.Core.Sim
             int ticks = 0;
             if (!_paused)
             {
-                _tickDebt += Math.Max(0, realSeconds) * BaseTicksPerSecond * Simulation.Settings.TimeScale;
+                _tickDebt += Math.Max(0, realSeconds) * BaseTicksPerSecond * Simulation.Settings.TimeScale * PlaybackFactor;
                 ticks = (int)Math.Floor(_tickDebt);
                 _tickDebt -= ticks;
                 if (ticks > MaxTicksPerAdvance)

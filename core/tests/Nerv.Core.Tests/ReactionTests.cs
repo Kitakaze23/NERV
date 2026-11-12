@@ -85,6 +85,12 @@ namespace Nerv.Core.Tests
                 int w = sim.World.Molecules.Count(m => m.ToString() == "H2O");
                 water += w;
                 if (w < 5) fizzled++;
+                // Уравнение шага в журнале сохраняет атомы: состав слева = составу справа.
+                foreach (ReactionRecord r in sim.ReactionLog)
+                {
+                    string l = Composition(r.Reactants), rr = Composition(r.Products);
+                    Assert.Equal(l, rr, "атомы в уравнении шага " + r.Reaction.Id);
+                }
                 Console.WriteLine("      seed " + seed + ": H₂O " + w + "/12, " + Formulas(sim));
             }
             Assert.True(fizzled <= 1, "пламя проходит по смеси, а не гаснет (не выгорело: " + fizzled + "/8)");
@@ -114,6 +120,18 @@ namespace Nerv.Core.Tests
             }
             Assert.True(co2 >= 0.4 * 36, "углерод сгорает до CO₂ (" + co2 + " из 36)");
             Assert.True(water >= 0.6 * 72, "водород сгорает до воды (" + water + " из 72)");
+        }
+
+        private static string Composition(System.Collections.Generic.IReadOnlyList<(string Formula, int Charge)> parts)
+        {
+            var counts = new System.Collections.Generic.SortedDictionary<string, int>(StringComparer.Ordinal);
+            foreach ((string f, int _) in parts)
+                foreach (System.Text.RegularExpressions.Match m in System.Text.RegularExpressions.Regex.Matches(f, "([A-Z][a-z]?)([0-9]*)"))
+                {
+                    counts.TryGetValue(m.Groups[1].Value, out int c);
+                    counts[m.Groups[1].Value] = c + (m.Groups[2].Value.Length > 0 ? int.Parse(m.Groups[2].Value) : 1);
+                }
+            return string.Join(",", counts.Select(kv => kv.Key + kv.Value));
         }
 
         [Test]
