@@ -1,0 +1,22 @@
+name: core
+
+on:
+  push:
+    paths: ["core/**", ".github/workflows/core.yml"]
+  pull_request:
+    paths: ["core/**", ".github/workflows/core.yml"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: "8.0.x"
+      - name: Build
+        working-directory: core
+        run: dotnet build -c Release
+      - name: Test
+        working-directory: core
+        run: dotnet run -c Release --no-build --project tests/Nerv.Core.Tests

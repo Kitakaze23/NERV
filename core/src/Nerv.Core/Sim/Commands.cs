@@ -1,0 +1,119 @@
+using System;
+using Nerv.Core.Data;
+using Nerv.Core.Model;
+using Nerv.Core.Numerics;
+
+namespace Nerv.Core.Sim
+{
+    /// <summary>
+    /// Любое изменение мира извне — команда. Команды проходят через очередь и журнал:
+    /// это даёт повторы, сохранения, отмену и (позже) сетевую игру поверх тех же команд.
+    /// </summary>
+    public abstract class Command
+    {
+        internal abstract void Execute(Simulation sim);
+    }
+
+    public sealed class AddAtom : Command
+    {
+        public int AtomicNumber { get; }
+        public Vec3 Position { get; }
+        public int Charge { get; }
+        /// <summary>Id созданного атома (заполняется при выполнении).</summary>
+        public AtomId Result { get; internal set; }
+
+        public AddAtom(int atomicNumber, Vec3 position, int charge = 0)
+        {
+            Element e = ElementTable.Get(atomicNumber);
+            if (!e.IsAvailable) throw new ArgumentException("Элемент " + e.Symbol + " пока недоступен.", nameof(atomicNumber));
+            AtomicNumber = atomicNumber;
+            Position = position;
+            Charge = charge;
+        }
+
+        public AddAtom(string symbol, Vec3 position, int charge = 0) : this(ElementTable.Get(symbol).Z, position, charge) { }
+
+        internal override void Execute(Simulation sim) => Result = sim.ExecAddAtom(this);
+    }
+
+    public sealed class RemoveAtom : Command
+    {
+        public AtomId Atom { get; }
+        public RemoveAtom(AtomId atom) { Atom = atom; }
+        internal override void Execute(Simulation sim) => sim.ExecRemoveAtom(this);
+    }
+
+    /// <summary>Мгновенная связь (для заготовок и тестов). Без проверки валентности.</summary>
+    public sealed class AddBond : Command
+    {
+        public AtomId A { get; }
+        public AtomId B { get; }
+        public int Order { get; }
+        public AddBond(AtomId a, AtomId b, int order = 1) { A = a; B = b; Order = order; }
+        internal override void Execute(Simulation sim) => sim.ExecAddBond(this);
+    }
+
+    /// <summary>Схватить атом «рукой». HandId позволяет нескольким рукам/игрокам держать разные атомы.</summary>
+    public sealed class Grab : Command
+    {
+        public int HandId { get; }
+        public AtomId Atom { get; }
+        public Vec3 Target { get; }
+        public Grab(AtomId atom, Vec3 target, int handId = 0) { Atom = atom; Target = target; HandId = handId; }
+        internal override void Execute(Simulation sim) => sim.ExecGrab(this);
+    }
+
+    public sealed class MoveGrab : Command
+    {
+        public int HandId { get; }
+        public Vec3 Target { get; }
+        public MoveGrab(Vec3 target, int handId = 0) { Target = target; HandId = handId; }
+        internal override void Execute(Simulation sim) => sim.ExecMoveGrab(this);
+    }
+
+    public sealed class Release : Command
+    {
+        public int HandId { get; }
+        public Release(int handId = 0) { HandId = handId; }
+        internal override void Execute(Simulation sim) => sim.ExecRelease(this);
+    }
+
+    public sealed class SetTemperature : Command
+    {
+        public double Kelvin { get; }
+        public SetTemperature(double kelvin)
+        {
+            if (kelvin < 0) throw new ArgumentOutOfRangeException(nameof(kelvin));
+            Kelvin = kelvin;
+        }
+        internal override void Execute(Simulation sim) => sim.Settings.TargetTemperature = Kelvin;
+    }
+
+    public sealed class SetMedium : Command
+    {
+        public Medium Medium { get; }
+        public SetMedium(Medium medium) { Medium = medium; }
+        internal override void Execute(Simulation sim) => sim.Settings.Medium = Medium;
+    }
+
+    public sealed class SetTimeScale : Command
+    {
+        public double Scale { get; }
+        public SetTimeScale(double scale)
+        {
+            if (scale < 0) throw new ArgumentOutOfRangeException(nameof(scale));
+            Scale = scale;
+        }
+        internal override void Execute(Simulation sim) => sim.Settings.TimeScale = Scale;
+    }
+
+    /// <summary>«Искра»: резкий локальный нагрев атомов в радиусе.</summary>
+    public sealed class Spark : Command
+    {
+        public Vec3 Center { get; }
+        public double Radius { get; }
+        public double Kelvin { get; }
+        public Spark(Vec3 center, double radius = 3.0, double kelvin = 5000.0) { Center = center; Radius = radius; Kelvin = kelvin; }
+        internal override void Execute(Simulation sim) => sim.ExecSpark(this);
+    }
+}

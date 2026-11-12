@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <!-- netstandard2.1 + C# 9: совместимо с Unity 6. Никаких зависимостей от UnityEngine. -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <RootNamespace>Nerv.Core</RootNamespace>
+    <AssemblyName>Nerv.Core</AssemblyName>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Remove="package.json" />
+    <None Remove="Nerv.Core.asmdef" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Nerv.Core.Tests" />
+  </ItemGroup>
+
+</Project>

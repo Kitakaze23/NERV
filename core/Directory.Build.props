@@ -1,0 +1,7 @@
+<Project>
+  <!-- bin/obj живут в core/artifacts, чтобы папка пакета Unity (src/Nerv.Core) оставалась чистой. -->
+  <PropertyGroup>
+    <UseArtifactsOutput>true</UseArtifactsOutput>
+    <Deterministic>true</Deterministic>
+  </PropertyGroup>
+</Project>
