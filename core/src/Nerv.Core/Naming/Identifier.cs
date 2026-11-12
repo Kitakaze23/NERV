@@ -35,6 +35,9 @@ namespace Nerv.Core.Naming
                 m.CanonicalKey = key;
                 m.Compound = data?.Compounds.Find(key);
                 m.Ion = m.Charge != 0 ? data?.Ions.Find(key) : null;
+                int fv = 0;
+                foreach (AtomId id in m.Atoms) fv += w.GetFreeValence(id);
+                m.FreeValence = fv;
                 if (m.Compound == null && m.Ion == null)
                 {
                     // Одиночный атом без записи в базе — называем по элементу, но не объявляем в журнале.

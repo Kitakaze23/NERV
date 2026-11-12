@@ -175,5 +175,25 @@ namespace Nerv.Core.Tests
             Assert.Equal("Na2O", g.Formula);
             Assert.Equal("Оксид натрия", g.Name);
         }
+
+        [Test]
+        public static void Radicals_AreMarked()
+        {
+            Simulation sim = NewSim(temperature: 10, withData: true);
+            AtomId o = Add(sim, "O", 0, 0, 0);
+            AtomId h1 = Add(sim, "H", 0.96, 0, 0);
+            sim.Apply(new AddBond(o, h1, 1));
+            sim.Step(2);
+            Molecule oh = sim.World.Molecules.First(m => m.Atoms.Contains(o));
+            Assert.True(oh.IsRadical, "OH — радикал");
+            Assert.Equal("Гидроксильный радикал", oh.Name);
+
+            AtomId h2 = Add(sim, "H", -0.3, 0.9, 0);
+            sim.Apply(new AddBond(o, h2, 1));
+            sim.Step(2);
+            Molecule water = sim.World.Molecules.First(m => m.Atoms.Contains(o));
+            Assert.True(!water.IsRadical, "вода — не радикал");
+            Assert.Equal("Вода", water.Name);
+        }
     }
 }

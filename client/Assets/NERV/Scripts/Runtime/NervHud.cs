@@ -69,7 +69,7 @@ namespace Nerv.Client
             foreach (Molecule m in snap.Molecules)
             {
                 if (m.Charge != 0 && _grouped.Contains(m.Atoms[0])) continue; // ион уже учтён в составе соли
-                string key = (m.Name ?? "неизвестное соединение") + "  " + FormulaText.Subscript(m.Formula) + FormulaText.ChargeSuperscript(m.Charge);
+                string key = (m.Name ?? "неизвестное соединение") + "  " + FormulaText.Subscript(m.Formula) + FormulaText.ChargeSuperscript(m.Charge) + RadicalMark(m);
                 counts.TryGetValue(key, out int c);
                 counts[key] = c + 1;
             }
@@ -219,6 +219,8 @@ namespace Nerv.Client
                 if (GUILayout.Button((slow ? "✓ " : "   ") + "Замедлять новые реакции", slow ? _active : _button))
                     NervDirector.Instance.SlowMotion = !slow;
             }
+            if (GUILayout.Button(NervQuality.Label, _button))
+                NervQuality.Current = NervQuality.High ? NervQuality.Level.Low : NervQuality.Level.High;
 
             GUILayout.Space(6);
             GUILayout.Label("Атомов: " + snap.AtomCount + "   ·   " + (snap.Tick * 0.5 / 1000.0).ToString("0.0") + " пс", _small);
@@ -311,12 +313,16 @@ namespace Nerv.Client
                 bool ion = m.Charge != 0;
                 if (m.Atoms.Count < 2 && !ion) continue;
                 if (ion && _grouped.Contains(m.Atoms[0])) continue; // ион уже подписан в составе соли
-                string text = (m.Name ?? "?") + "  " + FormulaText.Subscript(m.Formula) + FormulaText.ChargeSuperscript(m.Charge);
-                if (DrawTag(app, cam, m.Atoms, text, m.Name == null)) drawn++;
+                string text = (m.Name ?? "?") + "  " + FormulaText.Subscript(m.Formula) + FormulaText.ChargeSuperscript(m.Charge) + RadicalMark(m);
+                if (DrawTag(app, cam, m.Atoms, text, m.Name == null, 0.35f, m.IsRadical)) drawn++;
             }
         }
 
-        private bool DrawTag(NervApp app, Camera cam, IReadOnlyList<AtomId> atoms, string text, bool unknown, float lift = 0.35f)
+        /// <summary>Радикал — нестабильная частица: помечаем, если в названии этого ещё нет.</summary>
+        private static string RadicalMark(Molecule m) =>
+            m.IsRadical && m.Atoms.Count > 1 && (m.Name == null || !m.Name.Contains("радикал")) ? "  · радикал" : "";
+
+        private bool DrawTag(NervApp app, Camera cam, IReadOnlyList<AtomId> atoms, string text, bool unknown, float lift = 0.35f, bool radical = false)
         {
             Vector3 c = Vector3.zero;
             int n = 0;
@@ -351,6 +357,8 @@ namespace Nerv.Client
             for (int tries = 0; tries < 6 && _placedTags.Any(o => o.Overlaps(rect)); tries++)
                 rect.y -= size.y + 2;
             _placedTags.Add(rect);
+            // Радикалы (нестабильные частицы) — янтарной подписью, как в концепте.
+            _tag.normal.textColor = radical ? NervEnvironment.Heat : Color.white;
             GUI.Label(rect, text, _tag);
             GUI.color = prev;
             return true;

@@ -30,6 +30,10 @@ namespace Nerv.Client
         private static readonly float[] HeatSteps = { 900f, 1600f, 2500f };
         private readonly List<Matrix4x4>[] _hot = { new List<Matrix4x4>(), new List<Matrix4x4>(), new List<Matrix4x4>() };
         private readonly Material[] _hotMaterials = new Material[3];
+        // Иней: холодные атомы (ниже FrostBelow, K) покрываются бледно-голубым свечением.
+        private const float FrostBelow = 140f;
+        private readonly List<Matrix4x4> _frost = new List<Matrix4x4>();
+        private Material _frostMaterial;
         private Dictionary<AtomId, float> _heat = new Dictionary<AtomId, float>(), _heatNext = new Dictionary<AtomId, float>();
         private Material _dotMaterial, _highlightMaterial, _lineMaterial, _cationMaterial, _anionMaterial;
         private LineRenderer _box;
@@ -63,6 +67,8 @@ namespace Nerv.Client
             _hotMaterials[0] = MakeHalo(new Color(1f, 0.28f, 0.05f), 0.7f, 0.25f);
             _hotMaterials[1] = MakeHalo(new Color(1f, 0.5f, 0.12f), 1.1f, 0.25f);
             _hotMaterials[2] = MakeHalo(new Color(1f, 0.85f, 0.55f), 1.6f, 0.25f);
+            _frostMaterial = MakeHalo(new Color(0.7f, 0.88f, 1f), 0.75f, 0.05f);
+            if (_frostMaterial != null) _frostMaterial.SetFloat("_Hollow", 2.5f);
 
             Shader unlit = Shader.Find("Universal Render Pipeline/Unlit") ?? Shader.Find("Unlit/Color");
             _lineMaterial = new Material(unlit);
@@ -187,6 +193,7 @@ namespace Nerv.Client
             _cations.Clear();
             _anions.Clear();
             foreach (List<Matrix4x4> l in _hot) l.Clear();
+            _frost.Clear();
             // Сглаживание температуры атома (~0,15 с): мгновенная скорость отдельного атома слишком шумная.
             float heatK = 1f - Mathf.Exp(-Time.deltaTime / 0.15f);
             _heatNext.Clear();
@@ -214,8 +221,12 @@ namespace Nerv.Client
                 if (i == HoverIndex || i == GrabbedIndex)
                     _highlight.Add(Matrix4x4.TRS(p, Quaternion.identity, Vector3.one * (2f * r * (i == GrabbedIndex ? 1.7f : 1.5f))));
                 float tRaw = snap.Temperatures[i];
-                float heat = _heat.TryGetValue(snap.Ids[i], out float prevHeat) ? Mathf.Lerp(prevHeat, tRaw, heatK) : Mathf.Min(tRaw, 400f);
+                float heat = _heat.TryGetValue(snap.Ids[i], out float prevHeat) ? Mathf.Lerp(prevHeat, tRaw, heatK) : (float)snap.Temperature;
                 _heatNext[snap.Ids[i]] = heat;
+                // Одиночный медленный атом в газе может «остыть» и при комнатной температуре, поэтому иней —
+                // только когда холодна и вся сцена.
+                if (heat < FrostBelow && snap.Temperature < 220)
+                    _frost.Add(Matrix4x4.TRS(p, Quaternion.identity, Vector3.one * (2f * r * (1.35f + 0.4f * (1f - heat / FrostBelow)))));
                 for (int step = HeatSteps.Length - 1; step >= 0; step--)
                 {
                     if (heat < HeatSteps[step]) continue;
@@ -268,6 +279,7 @@ namespace Nerv.Client
             Draw(_sphere, _highlightMaterial, _highlight, false);
             if (_cationMaterial != null) Draw(_sphere, _cationMaterial, _cations, false);
             if (_anionMaterial != null) Draw(_sphere, _anionMaterial, _anions, false);
+            if (_frostMaterial != null) Draw(_sphere, _frostMaterial, _frost, false);
             for (int step = 0; step < _hot.Length; step++)
                 if (_hotMaterials[step] != null) Draw(_sphere, _hotMaterials[step], _hot[step], false);
             (_heat, _heatNext) = (_heatNext, _heat);

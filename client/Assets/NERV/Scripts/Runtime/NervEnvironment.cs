@@ -16,6 +16,9 @@ namespace Nerv.Client
 
         public static Camera MainCamera { get; private set; }
 
+        private static Volume _post;
+        private static Light _key;
+
         public static void Setup()
         {
             MainCamera = Camera.main;
@@ -42,13 +45,26 @@ namespace Nerv.Client
             // Свет: один направленный «ключевой» + мягкий контровой.
             foreach (Light l in Object.FindObjectsByType<Light>(FindObjectsSortMode.None))
                 if (l.type == LightType.Directional) l.enabled = false;
-            CreateLight("Key Light", new Vector3(40, -30, 0), new Color(1f, 0.97f, 0.92f), 1.2f, true);
+            _key = CreateLight("Key Light", new Vector3(40, -30, 0), new Color(1f, 0.97f, 0.92f), 1.2f, true);
             CreateLight("Rim Light", new Vector3(-20, 150, 0), new Color(0.45f, 0.8f, 1f), 0.5f, false);
 
             CreatePostProcessing();
+            NervQuality.Changed += ApplyQuality;
+            ApplyQuality();
         }
 
-        private static void CreateLight(string name, Vector3 euler, Color color, float intensity, bool shadows)
+        /// <summary>Применить уровень качества: свечение и тени.</summary>
+        public static void ApplyQuality()
+        {
+            bool high = NervQuality.High;
+            if (_post != null) _post.weight = high ? 1f : 0f;
+            if (_key != null) _key.shadows = high ? LightShadows.Soft : LightShadows.None;
+            UniversalAdditionalCameraData urp = MainCamera != null ? MainCamera.GetUniversalAdditionalCameraData() : null;
+            // В экономном режиме тонмаппинг тоже выключается вместе с Volume — постобработку можно не считать вовсе.
+            if (urp != null) urp.renderPostProcessing = high;
+        }
+
+        private static Light CreateLight(string name, Vector3 euler, Color color, float intensity, bool shadows)
         {
             var go = new GameObject(name);
             go.transform.rotation = Quaternion.Euler(euler);
@@ -57,6 +73,7 @@ namespace Nerv.Client
             l.color = color;
             l.intensity = intensity;
             l.shadows = shadows ? LightShadows.Soft : LightShadows.None;
+            return l;
         }
 
         private static void CreatePostProcessing()
@@ -79,6 +96,7 @@ namespace Nerv.Client
             vignette.intensity.Override(0.25f);
 
             volume.profile = profile;
+            _post = volume;
         }
     }
 }

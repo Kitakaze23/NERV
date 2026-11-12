@@ -23,6 +23,12 @@ namespace Nerv.Core.Model
         public IonInfo Ion { get; internal set; }
         /// <summary>Название для интерфейса или null («неизвестное соединение»).</summary>
         public string Name => Compound?.NameRu ?? Ion?.NameRu ?? AtomName;
+        /// <summary>
+        /// Суммарная свободная валентность (неспаренные электроны). Больше нуля — радикал:
+        /// частица нестабильна и охотно вступает в реакции.
+        /// </summary>
+        public int FreeValence { get; internal set; }
+        public bool IsRadical => FreeValence > 0;
         /// <summary>Для одиночного нейтрального атома без записи в базе: «Натрий (атом)».</summary>
         public string AtomName { get; internal set; }
 

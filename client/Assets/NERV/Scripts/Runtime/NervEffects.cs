@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.Linq;
 using Nerv.Core.Model;
 using Nerv.Core.Sim;
 using UnityEngine;
@@ -22,7 +23,7 @@ namespace Nerv.Client
             public Material Material;
             public Color Color;
             public bool Halo;
-            public float Age, Life, MaxRadius, Intensity;
+            public float Age, Life, MinRadius, MaxRadius, Intensity, HaloIntensity;
         }
 
         // Следы атомов реакции (по карте атомов): видно, какой атом куда перешёл.
@@ -36,7 +37,7 @@ namespace Nerv.Client
             public int Count;
         }
 
-        private const int TrailPoints = 32, MaxTrails = 64;
+        private const int TrailPoints = 32;
         private const float TrailLife = 1.1f;
         private readonly List<Trail> _trails = new List<Trail>();
         private readonly Stack<Trail> _trailPool = new Stack<Trail>();
@@ -70,8 +71,10 @@ namespace Nerv.Client
                 float strength = Mathf.Clamp(Mathf.Abs((float)dh) / 300f, 0.3f, 1.5f);
                 Spawn(NervApp.ToWorld(r.Position), c, 0.15f + 0.25f * strength, 0.5f + 0.4f * strength, 4f + 6f * strength);
                 foreach (AtomId id in r.AtomMap.Values)
-                    if (_trails.Count < MaxTrails) StartTrail(id, c);
+                    if (_trails.Count < NervQuality.MaxTrails) StartTrail(id, c);
             }
+            foreach (SimEvent e in app.Events)
+                if (e.Type == SimEventType.MoleculeIdentified) IdentifiedPulse(app, e);
             UpdateTrails(app);
 
             for (int i = _active.Count - 1; i >= 0; i--)
@@ -88,18 +91,62 @@ namespace Nerv.Client
                 }
                 float fade = (1f - t) * (1f - t);
                 f.Light.intensity = f.Intensity * fade;
-                f.Ball.localScale = Vector3.one * (f.MaxRadius * 2f * Mathf.Sqrt(t));
+                f.Ball.localScale = Vector3.one * (Mathf.Lerp(f.MinRadius, f.MaxRadius, Mathf.Sqrt(t)) * 2f);
                 if (f.Halo)
                 {
                     // Расходящаяся светящаяся «волна»: полое кольцо по Френелю.
                     f.Material.SetColor("_Color", f.Color);
-                    f.Material.SetFloat("_Intensity", 3.5f * fade);
+                    f.Material.SetFloat("_Intensity", f.HaloIntensity * fade);
                 }
                 else
                 {
                     f.Material.SetColor("_BaseColor", f.Color * (0.25f * fade));
                     f.Material.SetColor("_EmissionColor", f.Color * (2.5f * fade));
                 }
+            }
+        }
+
+        private readonly HashSet<string> _seenNames = new HashSet<string>();
+        private string _scene;
+
+        /// <summary>
+        /// Кольцо-пульс вокруг только что опознанной молекулы (концепт 7.2). Вещество, впервые
+        /// появившееся в сцене, — заметный пульс; повторное — лёгкий.
+        /// </summary>
+        private void IdentifiedPulse(NervApp app, SimEvent e)
+        {
+            if (_scene != app.SceneName)
+            {
+                _scene = app.SceneName;
+                _seenNames.Clear();
+            }
+            if (e.Text == null || _active.Count > 40) return;
+            WorldSnapshot snap = app.Snapshot;
+            foreach (Molecule m in snap.Molecules)
+            {
+                if (m.Atoms.Count == 0 || !m.Atoms.Contains(e.A)) continue;
+                if (m.Atoms.Count < 2) return; // одиночные атомы и радикалы-атомы не «празднуем»
+                Vector3 c = Vector3.zero;
+                int n = 0;
+                var pos = new List<Vector3>(m.Atoms.Count);
+                for (int i = 0; i < snap.AtomCount; i++)
+                    if (m.Atoms.Contains(snap.Ids[i]))
+                    {
+                        Vector3 p = app.AtomWorld(i);
+                        pos.Add(p);
+                        c += p;
+                        n++;
+                    }
+                if (n == 0) return;
+                c /= n;
+                float r = 0f;
+                foreach (Vector3 p in pos) r = Mathf.Max(r, (p - c).magnitude);
+                r += 0.06f; // ≈ радиус атома в метрах сцены
+                bool first = _seenNames.Add(e.Text);
+                Flash f = Spawn(c, NervEnvironment.Energy, r * (first ? 2.2f : 1.6f), first ? 0.9f : 0.6f, 0f);
+                f.MinRadius = r;
+                f.HaloIntensity = first ? 2.5f : 1.2f;
+                return;
             }
         }
 
@@ -180,7 +227,7 @@ namespace Nerv.Client
 
         public void SparkFlash(Vector3 at) => Spawn(at, NervEnvironment.Energy, 0.35f, 0.35f, 8f);
 
-        private void Spawn(Vector3 at, Color color, float radius, float life, float intensity)
+        private Flash Spawn(Vector3 at, Color color, float radius, float life, float intensity)
         {
             Flash f = _pool.Count > 0 ? _pool.Pop() : Create();
             f.Go.transform.position = at;
@@ -188,11 +235,16 @@ namespace Nerv.Client
             f.Color = color;
             f.Age = 0;
             f.Life = life;
+            f.MinRadius = 0f;
             f.MaxRadius = radius;
             f.Intensity = intensity;
+            f.HaloIntensity = 3.5f;
+            // Динамический свет — только на высоком качестве.
+            f.Light.enabled = intensity > 0f && NervQuality.High;
             f.Light.color = color;
             f.Light.range = radius * 4f;
             _active.Add(f);
+            return f;
         }
 
         private Flash Create()

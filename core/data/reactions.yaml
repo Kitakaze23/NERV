@@ -546,6 +546,40 @@
     mechanism: chain
   tags: [горение, экзотермическая, цепная, радикалы]
 
+- id: ch4_chain_ch2ooh
+  group: ch4_combustion
+  name: Горение метана — CH₂OOH + O₂
+  smarts: "[C;D3:1]([H:2])([H:3])[O:4][O:5][H:6].[O:7]=[O:8]>>[C:1]([H:2])([H:3])=[O:4].[O:5][H:6].[O:7]=[O:8]"
+  activationEnergy: 10
+  deltaH: -60
+  rate: 0.5
+  conditions:
+    medium: [vacuum]
+  effects: combustion_flash
+  education:
+    summary: "CH₄ + 2O₂ → CO₂ + 2H₂O"
+    textRu: "Радикал CH₂OOH при ударе о молекулу кислорода распадается на формальдегид и гидроксил — кислород лишь «третье тело»."
+    level: school
+    mechanism: chain
+  tags: [горение, экзотермическая, цепная, радикалы]
+
+- id: ch4_chain_ch2oh
+  group: ch4_combustion
+  name: Горение метана — CH₂OH + O₂
+  smarts: "[C;D3:1]([H:2])([H:3])[O:4][H:5].[O:6]=[O:7]>>[C:1]([H:2])([H:3])=[O:4].[H:5][O:6][O;D1:7]"
+  activationEnergy: 5
+  deltaH: -80
+  rate: 0.5
+  conditions:
+    medium: [vacuum]
+  effects: combustion_flash
+  education:
+    summary: "CH₄ + 2O₂ → CO₂ + 2H₂O"
+    textRu: "Гидроксиметильный радикал отдаёт водород кислороду: формальдегид и HO₂."
+    level: school
+    mechanism: chain
+  tags: [горение, экзотермическая, цепная, радикалы]
+
 - id: na_cl2_1
   group: na_cl2
   name: Натрий и хлор — шаг 1

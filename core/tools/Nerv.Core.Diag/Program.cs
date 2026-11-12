@@ -21,6 +21,7 @@ namespace Nerv.Core.Diag
             int seeds = args.Length > 1 ? int.Parse(args[1]) : 4;
             double ps = args.Length > 2 ? double.Parse(args[2], System.Globalization.CultureInfo.InvariantCulture) : 10;
             bool verbose = args.Contains("-v");
+            Names = args.Contains("-n");
             ChemistryData data = ChemistryData.LoadDirectory(FindData());
             var finals = new List<string>();
             int water = 0;
@@ -74,6 +75,8 @@ namespace Nerv.Core.Diag
             return 0;
         }
 
+        private static bool Names;
+
         private static int Count(Simulation sim, string f) => sim.World.Molecules.Count(m => m.ToString() == f);
 
         private static string Census(Simulation sim)
@@ -81,7 +84,7 @@ namespace Nerv.Core.Diag
             var counts = new Dictionary<string, int>();
             foreach (Molecule m in sim.World.Molecules)
             {
-                string k = m.ToString();
+                string k = Names ? (m.Name ?? "?" + m.CanonicalKey) : m.ToString();
                 counts.TryGetValue(k, out int c);
                 counts[k] = c + 1;
             }
