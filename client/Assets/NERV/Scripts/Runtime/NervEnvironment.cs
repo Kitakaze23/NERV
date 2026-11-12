@@ -49,6 +49,9 @@ namespace Nerv.Client
             CreateLight("Rim Light", new Vector3(-20, 150, 0), new Color(0.45f, 0.8f, 1f), 0.5f, false);
 
             CreatePostProcessing();
+            // В проекте Play Mode запускается без перезагрузки домена: статика переживает запуск,
+            // поэтому сначала отписываемся, чтобы подписка не копилась.
+            NervQuality.Changed -= ApplyQuality;
             NervQuality.Changed += ApplyQuality;
             ApplyQuality();
         }
