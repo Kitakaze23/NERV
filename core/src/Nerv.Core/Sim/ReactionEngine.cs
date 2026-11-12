@@ -40,28 +40,30 @@ namespace Nerv.Core.Sim
 
         private int[] _molOf = new int[64];
 
+        // Кэш разбиения на молекулы (пересчитывается при смене топологии).
+        private int _cacheVersion = -1;
+        private List<Molecule> _mols = new List<Molecule>();
+        private List<int>[] _molAtoms = new List<int>[0];
+        private int[][] _molCounts = new int[0][];
+        private readonly SortedSet<long> _contacts = new SortedSet<long>();
+
         public bool Apply(Simulation sim)
         {
             ChemistryData data = sim.Data;
             if (data == null || data.Reactions.Reactions.Count == 0) return false;
 
+            // Проверяем реакции раз в несколько тиков; вероятность пересчитывается (см. Roll).
+            int interval = Math.Max(1, sim.Settings.ReactionCheckInterval);
+            if (sim.Tick % interval != 0) return false;
+
             World w = sim.World;
             w.EnsureTopology();
             int n = w.AtomCount;
-            // Копия: при срабатывании реакции топология пересчитывается и список молекул в мире меняется.
-            var mols = new List<Molecule>(w.Molecules);
-            if (_molOf.Length < n) _molOf = new int[Math.Max(n, _molOf.Length * 2)];
-            var molAtoms = new List<int>[mols.Count];
-            for (int m = 0; m < mols.Count; m++)
-            {
-                molAtoms[m] = new List<int>(mols[m].Atoms.Count);
-                foreach (AtomId id in mols[m].Atoms)
-                {
-                    int i = w.IndexOf(id);
-                    _molOf[i] = m;
-                    molAtoms[m].Add(i);
-                }
-            }
+            if (_cacheVersion != w.TopologyVersion) RebuildCache(w);
+            // Локальные ссылки: при срабатывании реакции топология меняется, а перебор идёт по старому разбиению.
+            List<Molecule> mols = _mols;
+            List<int>[] molAtoms = _molAtoms;
+            int[][] counts = _molCounts;
 
             var used = new bool[mols.Count];
             bool changed = false;
@@ -69,12 +71,13 @@ namespace Nerv.Core.Sim
             IReadOnlyList<ReactionTemplate> all = data.Reactions.Reactions;
 
             // Одночастичные шаги (диссоциация и т. п.).
-            for (int m = 0; m < mols.Count; m++)
+            foreach (ReactionTemplate t in all)
             {
-                foreach (ReactionTemplate t in all)
+                if (t.Molecularity != 1 || !t.AllowsMedium(medium)) continue;
+                for (int m = 0; m < mols.Count; m++)
                 {
-                    if (used[m] || t.Molecularity != 1 || !t.AllowsMedium(medium)) continue;
-                    if (TryReact(sim, t, new[] { m }, molAtoms))
+                    if (used[m] || !Contains(counts[m], t.ComponentCounts[0])) continue;
+                    if (TryReact(sim, t, new[] { m }, molAtoms, interval))
                     {
                         used[m] = true;
                         changed = true;
@@ -82,32 +85,35 @@ namespace Nerv.Core.Sim
                 }
             }
 
-            // Двухчастичные шаги: только для молекул в контакте.
+            // Двухчастичные шаги: только для молекул в контакте (пары — из списка соседей).
             bool anyBimolecular = false;
             foreach (ReactionTemplate t in all) if (t.Molecularity == 2 && t.AllowsMedium(medium)) anyBimolecular = true;
             if (!anyBimolecular) return changed;
 
-            var contacts = new SortedSet<long>();
+            _contacts.Clear();
             double c2 = ContactDistance * ContactDistance;
-            for (int i = 0; i < n; i++)
+            NeighborList pairs = w.GetPairs(Physics.ForceField.PairCutoff(sim.Settings));
+            for (int p = 0; p < pairs.Count; p++)
             {
-                for (int j = i + 1; j < n; j++)
-                {
-                    int mi = _molOf[i], mj = _molOf[j];
-                    if (mi == mj) continue;
-                    if ((w.Positions[j] - w.Positions[i]).LengthSquared >= c2) continue;
-                    contacts.Add(mi < mj ? ((long)mi << 32) | (uint)mj : ((long)mj << 32) | (uint)mi);
-                }
+                int i = pairs.I[p], j = pairs.J[p];
+                if (i >= n || j >= n) continue;
+                int mi = _molOf[i], mj = _molOf[j];
+                if (mi == mj) continue;
+                if ((w.Positions[j] - w.Positions[i]).LengthSquared >= c2) continue;
+                _contacts.Add(mi < mj ? ((long)mi << 32) | (uint)mj : ((long)mj << 32) | (uint)mi);
             }
 
-            foreach (long pair in contacts)
+            foreach (long pair in _contacts)
             {
                 int a = (int)(pair >> 32), b = (int)(pair & 0xFFFFFFFF);
                 if (used[a] || used[b]) continue;
                 foreach (ReactionTemplate t in all)
                 {
                     if (t.Molecularity != 2 || !t.AllowsMedium(medium)) continue;
-                    if (TryReact(sim, t, new[] { a, b }, molAtoms) || TryReact(sim, t, new[] { b, a }, molAtoms))
+                    bool ab = Contains(counts[a], t.ComponentCounts[0]) && Contains(counts[b], t.ComponentCounts[1]);
+                    bool ba = Contains(counts[b], t.ComponentCounts[0]) && Contains(counts[a], t.ComponentCounts[1]);
+                    if ((ab && TryReact(sim, t, new[] { a, b }, molAtoms, interval)) ||
+                        (ba && TryReact(sim, t, new[] { b, a }, molAtoms, interval)))
                     {
                         used[a] = used[b] = true;
                         changed = true;
@@ -118,8 +124,40 @@ namespace Nerv.Core.Sim
             return changed;
         }
 
+        private void RebuildCache(World w)
+        {
+            int n = w.AtomCount;
+            _cacheVersion = w.TopologyVersion;
+            _mols = new List<Molecule>(w.Molecules);
+            if (_molOf.Length < n) _molOf = new int[Math.Max(n, _molOf.Length * 2)];
+            _molAtoms = new List<int>[_mols.Count];
+            _molCounts = new int[_mols.Count][];
+            for (int m = 0; m < _mols.Count; m++)
+            {
+                var atoms = new List<int>(_mols[m].Atoms.Count);
+                var cnt = new int[Data.ElementTable.Count + 1];
+                foreach (AtomId id in _mols[m].Atoms)
+                {
+                    int i = w.IndexOf(id);
+                    _molOf[i] = m;
+                    atoms.Add(i);
+                    cnt[w.Elements[i].Z]++;
+                }
+                _molAtoms[m] = atoms;
+                _molCounts[m] = cnt;
+            }
+        }
+
+        /// <summary>Быстрый отсев: в молекуле есть хотя бы столько атомов каждого элемента, сколько в шаблоне.</summary>
+        private static bool Contains(int[] have, int[] need)
+        {
+            for (int z = 0; z < need.Length; z++)
+                if (need[z] > have[z]) return false;
+            return true;
+        }
+
         /// <summary>Перебирает совпадения шаблона; для первого геометрически возможного бросает кубик.</summary>
-        private bool TryReact(Simulation sim, ReactionTemplate t, int[] molOrder, List<int>[] molAtoms)
+        private bool TryReact(Simulation sim, ReactionTemplate t, int[] molOrder, List<int>[] molAtoms, int interval)
         {
             World w = sim.World;
             bool decided = false, fired = false;
@@ -129,7 +167,7 @@ namespace Nerv.Core.Sim
             {
                 if (!Feasible(w, t, mapping)) return false; // ищем дальше
                 decided = true;
-                fired = Roll(sim, t, molOrder, molAtoms, mapping, out double tEff);
+                fired = Roll(sim, t, molOrder, molAtoms, interval, out double tEff);
                 if (fired) Fire(sim, t, mapping, tEff);
                 return true; // решение принято — останавливаем перебор
             }
@@ -265,7 +303,7 @@ namespace Nerv.Core.Sim
             return wb?.Order ?? 0;
         }
 
-        private static bool Roll(Simulation sim, ReactionTemplate t, int[] molOrder, List<int>[] molAtoms, Dictionary<int, int> mapping, out double tEff)
+        private static bool Roll(Simulation sim, ReactionTemplate t, int[] molOrder, List<int>[] molAtoms, int interval, out double tEff)
         {
             World w = sim.World;
             double ke = 0;
@@ -281,6 +319,8 @@ namespace Nerv.Core.Sim
 
             double eaKcal = t.ActivationEnergyKj / 4.184;
             double p = eaKcal <= 0 ? t.Rate : tEff <= 1e-9 ? 0 : t.Rate * Math.Exp(-eaKcal / (Units.Kb * tEff));
+            // Проверка раз в interval тиков: вероятность «хотя бы одного срабатывания» за это время.
+            if (interval > 1) p = 1.0 - Math.Pow(1.0 - p, interval);
             return sim.Rng.NextDouble() < p;
         }
 
@@ -289,8 +329,8 @@ namespace Nerv.Core.Sim
             World w = sim.World;
             // Энергетический баланс: потенциальная энергия до и после смены топологии.
             // Шаблон меняет связи мгновенно, и фрагменты могут оказаться «внутри» друг друга;
-            // этот артефакт компенсируем, чтобы суммарно выделилось ровно −ΔH из каталога.
-            double before = ForceField.Compute(w, sim.Settings);
+            // этот артефакт компенсируем, чтобы реакция не выделяла больше заданной доли −ΔH.
+            double before = ForceField.ComputeCached(w, sim.Settings);
 
             var pairs = new SortedSet<long>(t.ReactantBonds.Keys);
             pairs.UnionWith(t.ProductBonds.Keys);
@@ -333,7 +373,10 @@ namespace Nerv.Core.Sim
             foreach (int i in mapping.Values) center += w.Positions[i];
             center /= mapping.Count;
             double after = ForceField.Compute(w, sim.Settings);
-            AddHeat(sim, center, -t.DeltaHKj / 4.184 * sim.Settings.ReactionHeatFraction - (after - before));
+            // Компенсируем только рост потенциальной энергии (перекрытие фрагментов). Если она упала
+            // (например, новая ионная пара притягивается), в тепло это не превращаем — иначе продукты
+            // получают энергию больше энергии связи и разлетаются; «лишнее» уходит в среду.
+            AddHeat(sim, center, -t.DeltaHKj / 4.184 * sim.Settings.ReactionHeatFraction - Math.Max(0.0, after - before));
 
             var map = new SortedDictionary<int, AtomId>();
             foreach (KeyValuePair<int, int> kv in mapping) map[kv.Key] = w.IdAt(kv.Value);

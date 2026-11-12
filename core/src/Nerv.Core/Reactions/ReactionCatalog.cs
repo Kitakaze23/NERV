@@ -43,6 +43,8 @@ namespace Nerv.Core.Reactions
         internal Dictionary<long, int> ReactantBonds = new Dictionary<long, int>();
         internal Dictionary<long, int> ProductBonds = new Dictionary<long, int>();
         internal Dictionary<int, int> ProductCharges = new Dictionary<int, int>();
+        /// <summary>Состав каждого компонента реагентов (число атомов по Z) — для быстрого отсева.</summary>
+        internal int[][] ComponentCounts;
 
         public int Molecularity => ReactantComponents.Count;
 
@@ -72,6 +74,13 @@ namespace Nerv.Core.Reactions
             FillBonds(Products, ProductBonds);
             foreach (MolAtom a in Products.Atoms)
                 if (a.Map > 0) ProductCharges[a.Map] = a.Charge;
+            ComponentCounts = new int[ReactantComponents.Count][];
+            for (int c = 0; c < ReactantComponents.Count; c++)
+            {
+                var cnt = new int[ElementTable.Count + 1];
+                foreach (MolAtom a in ReactantComponents[c].Atoms) cnt[a.Z]++;
+                ComponentCounts[c] = cnt;
+            }
         }
 
         private static void FillBonds(MolGraph g, Dictionary<long, int> into)

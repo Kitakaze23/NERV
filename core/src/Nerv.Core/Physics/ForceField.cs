@@ -1,5 +1,7 @@
 using System;
 using System.Collections.Generic;
+using Nerv.Core.Chemistry;
+using Nerv.Core.Data;
 using Nerv.Core.Model;
 using Nerv.Core.Numerics;
 using Nerv.Core.Sim;
@@ -24,6 +26,14 @@ namespace Nerv.Core.Physics
     {
         /// <summary>Считает силы в <c>World.Forces</c> и возвращает потенциальную энергию, ккал/моль.</summary>
         public static double Compute(World w, SimulationSettings s, IReadOnlyList<GrabSpring> grabs = null)
+        {
+            // Координаты могли поменять снаружи — список соседей строим заново.
+            w.TouchPositions();
+            return ComputeCached(w, s, grabs);
+        }
+
+        /// <summary>То же, но с кэшированным списком соседей (ядро само отмечает изменения координат).</summary>
+        internal static double ComputeCached(World w, SimulationSettings s, IReadOnlyList<GrabSpring> grabs = null)
         {
             w.EnsureTopology();
             int n = w.AtomCount;
@@ -139,76 +149,98 @@ namespace Nerv.Core.Physics
         /// <summary>Квадрат длины сглаживания Кулона, Å².</summary>
         private const double CoulombSoftening2 = 0.3 * 0.3;
 
+        /// <summary>Радиус списка соседей: покрывает Ван-дер-Ваальс и захват.</summary>
+        internal static double PairCutoff(SimulationSettings s) => Math.Max(s.NonbondedCutoff, s.CaptureRadius);
+
         private static double Nonbonded(World w, SimulationSettings s, Vec3[] pos, Vec3[] f, int n)
         {
             double e = 0;
             double rc = s.CaptureRadius, rc2 = rc * rc;
-            double cut2 = s.NonbondedCutoff * s.NonbondedCutoff;
+            double cut = s.NonbondedCutoff, cut2 = cut * cut;
+            int[] free = w.FreeValences;
+            UffAtomType[] types = w.Types;
+
+            // Ближние пары (захват и Ван-дер-Ваальс) — из списка соседей.
+            NeighborList pairs = w.GetPairs(PairCutoff(s));
+            for (int p = 0; p < pairs.Count; p++)
+            {
+                int i = pairs.I[p], j = pairs.J[p];
+                Vec3 d = pos[j] - pos[i];
+                double r2 = d.LengthSquared;
+                if (r2 < 1e-12) continue;
+
+                bool bondable = free[i] > 0 && free[j] > 0 && BondRules.CanBond(w, i, j);
+                if (bondable ? r2 >= rc2 : r2 >= cut2) continue;
+                if (w.IsExcluded(i, j)) continue;
+
+                double r = Math.Sqrt(r2);
+                double dEdr;
+                if (bondable)
+                {
+                    // Захват: оба атома могут образовать связь — Ван-дер-Ваальс не мешает, работает притяжение.
+                    double x = rc - r;
+                    e += -s.CaptureStrength * x * x / (2.0 * rc);
+                    dEdr = s.CaptureStrength * x / rc;
+                }
+                else
+                {
+                    double xij = Math.Sqrt(types[i].X1 * types[j].X1);
+                    double dij = Math.Sqrt(types[i].D1 * types[j].D1);
+                    // «Мягкое ядро»: ниже rs потенциал продолжается линейно (сила постоянна) — консервативно.
+                    double rs = SoftCoreFraction * xij;
+                    double rEff = r > rs ? r : rs;
+                    double t = xij / rEff, t2 = t * t;
+                    double s6 = t2 * t2 * t2;
+                    double eLj = dij * (s6 * s6 - 2.0 * s6);
+                    double dLj = dij * 12.0 * (s6 - s6 * s6) / rEff;
+                    // Сдвиг энергии, чтобы на отсечке не было скачка.
+                    double tc = xij / cut, tc2 = tc * tc, sc6 = tc2 * tc2 * tc2;
+                    e += eLj - dij * (sc6 * sc6 - 2.0 * sc6) + (r < rs ? dLj * (r - rs) : 0.0);
+                    dEdr = dLj;
+                }
+
+                Vec3 fi = d * (dEdr / r);
+                f[i] += fi;
+                f[j] -= fi;
+            }
+
+            // Кулон — отдельно и только между заряженными атомами (их мало, а отсечка большая).
+            e += Coulomb(w, s, pos, f, n);
+            return e;
+        }
+
+        [ThreadStatic] private static int[] _charged;
+
+        private static double Coulomb(World w, SimulationSettings s, Vec3[] pos, Vec3[] f, int n)
+        {
+            int q = 0;
+            if (_charged == null || _charged.Length < n) _charged = new int[Math.Max(n, 64)];
+            for (int i = 0; i < n; i++) if (w.Charges[i] != 0) _charged[q++] = i;
+            if (q < 2) return 0;
+
+            double e = 0;
             double coulCut = s.CoulombCutoff, coulCut2 = coulCut * coulCut;
             double coulK = Units.Coulomb / s.Dielectric;
-
-            for (int i = 0; i < n; i++)
+            double rce = Math.Sqrt(coulCut2 + CoulombSoftening2);
+            for (int a = 0; a < q; a++)
             {
-                for (int j = i + 1; j < n; j++)
+                int i = _charged[a];
+                for (int b = a + 1; b < q; b++)
                 {
+                    int j = _charged[b];
                     Vec3 d = pos[j] - pos[i];
                     double r2 = d.LengthSquared;
-                    if (r2 < 1e-12) continue;
-
-                    int qi = w.Charges[i], qj = w.Charges[j];
-                    bool charged = qi != 0 && qj != 0;
-                    bool bondable = w.FreeValences[i] > 0 && w.FreeValences[j] > 0;
-                    bool capture = bondable && r2 < rc2;
-                    bool lj = !bondable && r2 < cut2;
-                    bool coulomb = charged && r2 < coulCut2;
-                    // Дешёвая проверка расстояния — до поиска в таблице исключений.
-                    if (!(capture || lj || coulomb) || w.IsExcluded(i, j)) continue;
-
+                    if (r2 >= coulCut2 || r2 < 1e-12 || w.IsExcluded(i, j)) continue;
+                    // Кулон со сдвигом силы (shifted force) — непрерывен на отсечке;
+                    // плюс сглаживание на малых r (re = √(r² + a²)), чтобы ионы не «проваливались» друг в друга.
                     double r = Math.Sqrt(r2);
-                    double dEdr = 0;
-
-                    // Захват: оба атома могут образовать связь — Ван-дер-Ваальс не мешает, работает притяжение.
-                    if (capture)
-                    {
-                        double x = rc - r;
-                        e += -s.CaptureStrength * x * x / (2.0 * rc);
-                        dEdr += s.CaptureStrength * x / rc;
-                    }
-
-                    if (lj)
-                    {
-                        double xij = Math.Sqrt(w.Types[i].X1 * w.Types[j].X1);
-                        double dij = Math.Sqrt(w.Types[i].D1 * w.Types[j].D1);
-                        // «Мягкое ядро»: ниже rs потенциал продолжается линейно (сила постоянна) — консервативно.
-                        double rs = SoftCoreFraction * xij;
-                        double rEff = r > rs ? r : rs;
-                        double t = xij / rEff, t2 = t * t;
-                        double s6 = t2 * t2 * t2;
-                        double eLj = dij * (s6 * s6 - 2.0 * s6);
-                        double dLj = dij * 12.0 * (s6 - s6 * s6) / rEff;
-                        // Сдвиг энергии, чтобы на отсечке не было скачка.
-                        double tc = xij / s.NonbondedCutoff, tc2 = tc * tc, sc6 = tc2 * tc2 * tc2;
-                        e += eLj - dij * (sc6 * sc6 - 2.0 * sc6) + (r < rs ? dLj * (r - rs) : 0.0);
-                        dEdr += dLj;
-                    }
-
-                    if (coulomb)
-                    {
-                        // Кулон со сдвигом силы (shifted force) — непрерывен на отсечке;
-                        // плюс сглаживание на малых r (re = √(r² + a²)), чтобы ионы не «проваливались» друг в друга.
-                        double qq = coulK * qi * qj;
-                        double re = Math.Sqrt(r2 + CoulombSoftening2);
-                        double rce = Math.Sqrt(coulCut2 + CoulombSoftening2);
-                        e += qq * (1.0 / re - 1.0 / rce + (re - rce) / (rce * rce));
-                        dEdr += qq * (1.0 / (rce * rce) - 1.0 / (re * re)) * (r / re);
-                    }
-
-                    if (dEdr != 0)
-                    {
-                        Vec3 fi = d * (dEdr / r);
-                        f[i] += fi;
-                        f[j] -= fi;
-                    }
+                    double qq = coulK * w.Charges[i] * w.Charges[j];
+                    double re = Math.Sqrt(r2 + CoulombSoftening2);
+                    e += qq * (1.0 / re - 1.0 / rce + (re - rce) / (rce * rce));
+                    double dEdr = qq * (1.0 / (rce * rce) - 1.0 / (re * re)) * (r / re);
+                    Vec3 fi = d * (dEdr / r);
+                    f[i] += fi;
+                    f[j] -= fi;
                 }
             }
             return e;

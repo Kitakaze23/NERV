@@ -21,6 +21,16 @@ namespace Nerv.Core.Sim
         }
 
         private readonly ReactionEngine _reactions = new ReactionEngine();
+        /// <summary>Пары атомов, которым временно нельзя соединиться (осколки искры): ключ → тик окончания запрета.</summary>
+        private readonly Dictionary<long, long> _noRebond = new Dictionary<long, long>();
+
+        internal void ForbidRebond(AtomId a, AtomId b, long untilTick) => _noRebond[RebondKey(a, b)] = untilTick;
+
+        private static long RebondKey(AtomId a, AtomId b)
+        {
+            long x = ((long)a.Slot << 16) ^ a.Generation, y = ((long)b.Slot << 16) ^ b.Generation;
+            return x < y ? (x << 32) ^ y : (y << 32) ^ x;
+        }
         private readonly List<Candidate> _candidates = new List<Candidate>();
         private readonly List<Bond> _bondScratch = new List<Bond>();
         private int[] _free = new int[64];
@@ -33,7 +43,9 @@ namespace Nerv.Core.Sim
             w.EnsureTopology();
             SimulationSettings s = sim.Settings;
 
+            long t0 = SimulationProfile.Now();
             bool changed = _reactions.Apply(sim);
+            sim.Profile.ReactionsMs += SimulationProfile.Ms(t0);
             changed |= FormBonds(sim, w, s);
             changed |= BreakBonds(sim, w, s);
             if (!changed) changed |= UpgradeOrders(sim, w, s);
@@ -57,23 +69,23 @@ namespace Nerv.Core.Sim
                 _touched[i] = false;
             }
 
+            // Кандидаты — из списка соседей (радиус захвата меньше его отсечки).
             double maxForm = s.CaptureRadius;
-            for (int i = 0; i < n; i++)
+            NeighborList pairs = w.GetPairs(Physics.ForceField.PairCutoff(s));
+            for (int p = 0; p < pairs.Count; p++)
             {
-                if (_free[i] <= 0) continue;
-                for (int j = i + 1; j < n; j++)
-                {
-                    if (_free[j] <= 0 || w.IsExcluded(i, j)) continue;
-                    double r2 = (w.Positions[j] - w.Positions[i]).LengthSquared;
-                    if (r2 > maxForm * maxForm) continue;
+                int i = pairs.I[p], j = pairs.J[p];
+                if (_free[i] <= 0 || _free[j] <= 0) continue;
+                double r2 = (w.Positions[j] - w.Positions[i]).LengthSquared;
+                if (r2 > maxForm * maxForm || w.IsExcluded(i, j) || !BondRules.CanBond(w, i, j)) continue;
 
-                    Element ei = w.Elements[i], ej = w.Elements[j];
-                    bool ionic = ElectronRules.IsIonicPair(ei, ej, s.IonicElectronegativityThreshold);
-                    double formR = ionic
-                        ? s.IonicFormFactor * (w.Types[i].R1 + w.Types[j].R1)
-                        : s.CovalentFormFactor * Uff.RestLength(w.Types[i], w.Types[j], 1);
-                    if (r2 < formR * formR) _candidates.Add(new Candidate { R2 = r2, I = i, J = j, Ionic = ionic });
-                }
+                Element ei = w.Elements[i], ej = w.Elements[j];
+                bool ionic = ElectronRules.IsIonicPair(ei, ej, s.IonicElectronegativityThreshold);
+                double formR = ionic
+                    ? s.IonicFormFactor * (w.Types[i].R1 + w.Types[j].R1)
+                    : s.CovalentFormFactor * Uff.RestLength(w.Types[i], w.Types[j], 1);
+                if (r2 < formR * formR)
+                    _candidates.Add(new Candidate { R2 = r2, I = Math.Min(i, j), J = Math.Max(i, j), Ionic = ionic });
             }
 
             if (_candidates.Count == 0) return false;
@@ -95,6 +107,11 @@ namespace Nerv.Core.Sim
                 if (_touched[i] || _touched[j] || _free[i] <= 0 || _free[j] <= 0) continue;
 
                 AtomId idI = w.IdAt(i), idJ = w.IdAt(j);
+                if (_noRebond.Count > 0 && _noRebond.TryGetValue(RebondKey(idI, idJ), out long until))
+                {
+                    if (sim.Tick < until) continue;
+                    _noRebond.Remove(RebondKey(idI, idJ));
+                }
                 if (c.Ionic)
                 {
                     int metal = w.Elements[i].IsMetal ? i : j;
@@ -174,7 +191,7 @@ namespace Nerv.Core.Sim
         {
             for (int k = 0; k < w.AtomCount; k++)
             {
-                if (k == i || k == except || w.FreeValences[k] <= 0 || w.IsExcluded(i, k)) continue;
+                if (k == i || k == except || w.FreeValences[k] <= 0 || w.IsExcluded(i, k) || !BondRules.CanBond(w, i, k)) continue;
                 if ((w.Positions[k] - w.Positions[i]).LengthSquared < rc2) return true;
             }
             return false;

@@ -22,6 +22,9 @@ namespace Nerv.Core.Sim
         /// <summary>Химические данные (названия, ионы, реакции). Без них ядро работает только на правилах валентности.</summary>
         public ChemistryData Data { get; }
 
+        /// <summary>Время по фазам шага.</summary>
+        public SimulationProfile Profile { get; } = new SimulationProfile();
+
         /// <summary>Как часто пересчитывать ионные ассоциации, тиков.</summary>
         public int IonicGroupInterval { get; set; } = 25;
 
@@ -108,6 +111,7 @@ namespace Nerv.Core.Sim
 
         private void StepOnce()
         {
+            long tStart = SimulationProfile.Now();
             FlushPending();
             World w = World;
             World.BondEnergyPerOrder = Settings.BondEnergyPerOrder;
@@ -123,8 +127,11 @@ namespace Nerv.Core.Sim
                 w.Velocities[i] += a * (0.5 * dt);
                 w.Positions[i] += w.Velocities[i] * dt;
             }
+            w.TouchPositions();
 
+            long t0 = SimulationProfile.Now();
             _rules.Apply(this);
+            Profile.RulesMs += SimulationProfile.Ms(t0);
             ComputeForces();
 
             for (int i = 0; i < n; i++)
@@ -150,17 +157,27 @@ namespace Nerv.Core.Sim
             {
                 _lastTopologyVersion = w.TopologyVersion;
                 Emit(SimEventType.TopologyChanged, AtomId.None, AtomId.None, w.TopologyVersion);
+                long ti = SimulationProfile.Now();
                 _identifier.IdentifyMolecules(this);
+                Profile.IdentifyMs += SimulationProfile.Ms(ti);
             }
             if (topologyChanged || Tick % Math.Max(1, IonicGroupInterval) == 0)
+            {
+                long tg = SimulationProfile.Now();
                 _identifier.UpdateGroups(this);
+                Profile.GroupsMs += SimulationProfile.Ms(tg);
+            }
 
             Tick++;
+            Profile.Ticks++;
+            Profile.TotalMs += SimulationProfile.Ms(tStart);
         }
 
         private void ComputeForces()
         {
-            PotentialEnergy = ForceField.Compute(World, Settings, _grabList);
+            long t0 = SimulationProfile.Now();
+            PotentialEnergy = ForceField.ComputeCached(World, Settings, _grabList);
+            Profile.ForcesMs += SimulationProfile.Ms(t0);
             _forcesStale = false;
         }
 
@@ -295,13 +312,48 @@ namespace Nerv.Core.Sim
         internal void ExecSpark(Spark c)
         {
             World w = World;
+            w.EnsureTopology();
             double r2 = c.Radius * c.Radius;
             for (int i = 0; i < w.AtomCount; i++)
             {
                 if ((w.Positions[i] - c.Center).LengthSquared > r2) continue;
                 w.Velocities[i] += Thermostat.SampleVelocity(_rng, w.Masses[i], c.Kelvin);
             }
+
+            // Расщепление связей на радикалы (гомолиз): выбираем случайные связи в радиусе.
+            var candidates = new List<Bond>();
+            foreach (Bond b in w.Bonds)
+                if (b.IsFormed &&
+                    (w.Positions[b.Ia] - c.Center).LengthSquared <= r2 &&
+                    (w.Positions[b.Ib] - c.Center).LengthSquared <= r2)
+                    candidates.Add(b);
+
+            for (int k = 0; k < c.Radicals && candidates.Count > 0; k++)
+            {
+                int pick = (int)(_rng.NextDouble() * candidates.Count);
+                Bond b = candidates[pick];
+                candidates.RemoveAt(pick);
+                int i = b.Ia, j = b.Ib;
+
+                if (b.Order > 1) w.SetBondOrder(b, b.Order - 1);
+                else w.RemoveBond(b);
+                Emit(SimEventType.BondBroken, b.A, b.B, b.Id);
+                _rules.ForbidRebond(b.A, b.B, Tick + SparkRebondCooldownTicks);
+
+                // Осколки разлетаются с равными и противоположными импульсами.
+                Vec3 axis = (w.Positions[j] - w.Positions[i]).Normalized();
+                double mi = w.Masses[i], mj = w.Masses[j];
+                double mu = mi * mj / (mi + mj);
+                double p = Math.Sqrt(2.0 * SparkFragmentEnergyKcal * Units.AccelFactor * mu);
+                w.Velocities[i] -= axis * (p / mi);
+                w.Velocities[j] += axis * (p / mj);
+            }
         }
+
+        /// <summary>Энергия разлёта осколков после расщепления связи искрой, ккал/моль.</summary>
+        private const double SparkFragmentEnergyKcal = 30.0;
+        /// <summary>Сколько тиков осколкам искры нельзя снова соединиться друг с другом.</summary>
+        private const int SparkRebondCooldownTicks = 200;
 
         private void RebuildGrabList()
         {

@@ -107,13 +107,24 @@ namespace Nerv.Core.Sim
         internal override void Execute(Simulation sim) => sim.Settings.TimeScale = Scale;
     }
 
-    /// <summary>«Искра»: резкий локальный нагрев атомов в радиусе.</summary>
+    /// <summary>
+    /// «Искра» (электрический разряд): резкий локальный нагрев атомов в радиусе и расщепление нескольких
+    /// связей на радикалы — именно радикалы запускают цепные реакции (горение).
+    /// </summary>
     public sealed class Spark : Command
     {
         public Vec3 Center { get; }
         public double Radius { get; }
         public double Kelvin { get; }
-        public Spark(Vec3 center, double radius = 3.0, double kelvin = 5000.0) { Center = center; Radius = radius; Kelvin = kelvin; }
+        /// <summary>Сколько связей расщепить на радикалы (0 — только нагрев).</summary>
+        public int Radicals { get; }
+        public Spark(Vec3 center, double radius = 3.0, double kelvin = 5000.0, int radicals = 2)
+        {
+            Center = center;
+            Radius = radius;
+            Kelvin = kelvin;
+            Radicals = radicals;
+        }
         internal override void Execute(Simulation sim) => sim.ExecSpark(this);
     }
 }

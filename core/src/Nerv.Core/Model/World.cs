@@ -40,8 +40,15 @@ namespace Nerv.Core.Model
         internal int[] LonePairCounts = new int[InitialCapacity];
         internal List<Bond>[] AdjacentBonds = new List<Bond>[InitialCapacity];
         internal readonly List<Angle> Angles = new List<Angle>();
-        private readonly HashSet<long> _excluded = new HashSet<long>();
+        // Исключения 1-2/1-3 в компактном виде (CSR): для атома i — ExclList[ExclStart[i] .. ExclStart[i+1]).
+        private int[] _exclStart = new int[InitialCapacity + 1];
+        private int[] _exclList = new int[InitialCapacity * 8];
         private readonly List<Molecule> _molecules = new List<Molecule>();
+
+        // --- Список соседей ---
+        internal readonly NeighborList Pairs = new NeighborList();
+        /// <summary>Растёт при любом изменении координат или набора атомов ядром (для кэша списка соседей).</summary>
+        internal int PositionStamp;
 
         // --- Таблица слотов ---
         private int[] _slotToDense = new int[InitialCapacity];
@@ -58,7 +65,7 @@ namespace Nerv.Core.Model
         /// <summary>Растёт при каждом пересчёте топологии.</summary>
         public int TopologyVersion { get; private set; }
 
-        /// <summary>Глубина ямы Морзе на единицу порядка связи, ккал/моль (UFF рекомендует ~70).</summary>
+        /// <summary>Глубина ямы Морзе на единицу порядка для пар, которых нет в таблице энергий связей, ккал/моль.</summary>
         public double BondEnergyPerOrder { get; set; } = 70.0;
 
         public IReadOnlyList<Molecule> Molecules
@@ -102,6 +109,7 @@ namespace Nerv.Core.Model
             _slotToDense[slot] = i;
 
             MarkTopologyDirty();
+            PositionStamp++;
             return new AtomId(slot, _slotGeneration[slot]);
         }
 
@@ -133,6 +141,7 @@ namespace Nerv.Core.Model
             _freeSlots.Push(id.Slot);
 
             MarkTopologyDirty();
+            PositionStamp++;
             return true;
         }
 
@@ -238,9 +247,25 @@ namespace Nerv.Core.Model
         }
 
         /// <summary>Пара связана через 1 или 2 связи (1-2, 1-3) — для неё не считаются невалентные взаимодействия.</summary>
-        internal bool IsExcluded(int i, int j) => _excluded.Contains(PairKey(i, j));
+        internal bool IsExcluded(int i, int j)
+        {
+            for (int k = _exclStart[i], end = _exclStart[i + 1]; k < end; k++)
+                if (_exclList[k] == j) return true;
+            return false;
+        }
 
-        private static long PairKey(int i, int j) => i < j ? ((long)i << 32) | (uint)j : ((long)j << 32) | (uint)i;
+        /// <summary>Список пар ближе cutoff для текущих координат (перестраивается, только если координаты менялись).</summary>
+        internal NeighborList GetPairs(double cutoff)
+        {
+            if (Pairs.Stamp != PositionStamp || Pairs.Cutoff < cutoff)
+            {
+                Pairs.Build(Positions, AtomCount, cutoff);
+                Pairs.Stamp = PositionStamp;
+            }
+            return Pairs;
+        }
+
+        internal void TouchPositions() => PositionStamp++;
 
         private void RebuildTopology()
         {
@@ -276,7 +301,7 @@ namespace Nerv.Core.Model
                 UffAtomType ta = Types[b.Ia], tb = Types[b.Ib];
                 b.RestLength = Uff.RestLength(ta, tb, b.Order);
                 double k = Uff.BondForceConstant(ta, tb, b.RestLength);
-                b.De = BondEnergyPerOrder * b.Order;
+                b.De = BondEnergies.Get(Elements[b.Ia], Elements[b.Ib], b.Order, BondEnergyPerOrder);
                 b.Alpha = Math.Sqrt(k / (2.0 * b.De));
                 double ea = Elements[b.Ia].Electronegativity, eb = Elements[b.Ib].Electronegativity;
                 b.IsPolar = Math.Abs(ea - eb) > 0.4;
@@ -333,20 +358,31 @@ namespace Nerv.Core.Model
 
         private void RebuildExclusions(int n)
         {
-            _excluded.Clear();
+            if (_exclStart.Length < n + 1) _exclStart = new int[Math.Max(n + 1, _exclStart.Length * 2)];
+            int count = 0;
             for (int i = 0; i < n; i++)
             {
+                _exclStart[i] = count;
                 foreach (Bond b1 in AdjacentBonds[i])
                 {
                     int j = b1.Ia == i ? b1.Ib : b1.Ia;
-                    _excluded.Add(PairKey(i, j));
+                    AddExclusion(ref count, i, j);
                     foreach (Bond b2 in AdjacentBonds[j])
                     {
                         int k = b2.Ia == j ? b2.Ib : b2.Ia;
-                        if (k != i) _excluded.Add(PairKey(i, k));
+                        if (k != i) AddExclusion(ref count, i, k);
                     }
                 }
             }
+            _exclStart[n] = count;
+        }
+
+        private void AddExclusion(ref int count, int i, int j)
+        {
+            for (int k = _exclStart[i]; k < count; k++)
+                if (_exclList[k] == j) return;
+            if (count == _exclList.Length) Array.Resize(ref _exclList, _exclList.Length * 2);
+            _exclList[count++] = j;
         }
 
         private void RebuildMolecules(int n)

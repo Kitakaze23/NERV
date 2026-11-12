@@ -17,6 +17,7 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Nerv.Core.Tests" />
+    <InternalsVisibleTo Include="Nerv.Core.Bench" />
   </ItemGroup>
 
 </Project>

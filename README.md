@@ -15,6 +15,7 @@
 |---|---|---|
 | 1 | **Ядро симуляции**: модель данных, правила валентности, силовое поле UFF, команды/события, снимки, тесты | ✅ готово |
 | 2 | **Реакции и названия**: каталог (YAML + reaction SMARTS), канонизатор, база веществ и ионов, ионные ассоциации | ✅ готово |
+| 2.5 | **Ускорение ядра**: сетка ячеек (200 атомов ≈ 0,15 мс/тик), фоновый поток `SimulationHost` | ✅ готово |
 | 3 | Unity-клиент для компьютера: рендер «стекло + неон», ввод лучом, UI | ⏳ далее |
 | 4 | Эффекты, уровни качества, производительность | — |
 
@@ -33,6 +34,7 @@ core/
     Sim/                    Simulation, команды, события, правила топологии, движок реакций, снимки
   data/                     compounds.tsv (база названий), ions.tsv, reactions.yaml (каталог реакций)
   tests/Nerv.Core.Tests/    тесты (свой мини-раннер, без внешних пакетов)
+  bench/Nerv.Core.Bench/    бенчмарк: время на тик по фазам для 100/200/500 атомов
 docs/
   architecture.md
 ```
@@ -45,6 +47,7 @@ docs/
 cd core
 dotnet run --project tests/Nerv.Core.Tests            # все тесты
 dotnet run --project tests/Nerv.Core.Tests Water      # фильтр по имени
+dotnet run -c Release --project bench/Nerv.Core.Bench # бенчмарк
 ```
 
 Тесты проверяют химию, а не конкретные траектории: вода собирается с углом ~104,5°, метан — тетраэдр,
@@ -78,6 +81,16 @@ foreach (var e in sim.Events)            // BondForming, BondFormed, MoleculeIde
 
 var snapshot = new WorldSnapshot();      // для рендера: без аллокаций в кадре
 sim.WriteSnapshot(snapshot);
+```
+
+В клиенте ядро запускается через `SimulationHost`: симуляция идёт в своём потоке, кадр забирает готовый снимок и события.
+
+```csharp
+var host = new SimulationHost(sim);
+host.Start();                                  // фоновый поток (или host.Advance(dt) из кадра)
+host.Submit(new Grab(atomId, target));         // ввод — из любого потока
+host.CopySnapshot(snapshot);                   // в кадре: координаты, связи, молекулы с названиями
+host.DrainEvents(events);                      // эффекты: BondFormed, ReactionFired, HeatReleased…
 ```
 
 Все изменения мира — команды (`AddAtom`, `RemoveAtom`, `Grab`/`MoveGrab`/`Release`, `SetTemperature`,

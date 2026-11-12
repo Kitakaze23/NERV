@@ -40,6 +40,26 @@ namespace Nerv.Core.Sim
         /// <summary>Ионные ассоциации (соли), неизменяемые объекты.</summary>
         public IReadOnlyList<IonicGroup> IonicGroups = Array.Empty<IonicGroup>();
 
+        /// <summary>Копия снимка в dst (массивы dst переиспользуются, если хватает места).</summary>
+        public void CopyTo(WorldSnapshot dst)
+        {
+            dst.EnsureCapacity(AtomCount);
+            dst.Tick = Tick;
+            dst.TopologyVersion = TopologyVersion;
+            dst.Temperature = Temperature;
+            dst.AtomCount = AtomCount;
+            Array.Copy(Ids, dst.Ids, AtomCount);
+            Array.Copy(AtomicNumbers, dst.AtomicNumbers, AtomCount);
+            Array.Copy(Charges, dst.Charges, AtomCount);
+            Array.Copy(FreeValences, dst.FreeValences, AtomCount);
+            Array.Copy(LonePairs, dst.LonePairs, AtomCount);
+            Array.Copy(Positions, dst.Positions, AtomCount * 3);
+            dst.Bonds.Clear();
+            dst.Bonds.AddRange(Bonds);
+            dst.Molecules = Molecules;
+            dst.IonicGroups = IonicGroups;
+        }
+
         internal void EnsureCapacity(int n)
         {
             if (Ids.Length >= n) return;

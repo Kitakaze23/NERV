@@ -36,8 +36,8 @@ namespace Nerv.Core.Sim
         public double WallStiffness { get; set; } = 10.0;
 
         // --- Невалентные взаимодействия ---
-        /// <summary>Радиус отсечки Ван-дер-Ваальса, Å.</summary>
-        public double NonbondedCutoff { get; set; } = 8.0;
+        /// <summary>Радиус отсечки Ван-дер-Ваальса, Å (на 6 Å вклад UFF уже ~0,005 ккал/моль).</summary>
+        public double NonbondedCutoff { get; set; } = 6.0;
         /// <summary>Радиус отсечки Кулона, Å.</summary>
         public double CoulombCutoff { get; set; } = 20.0;
 
@@ -75,6 +75,9 @@ namespace Nerv.Core.Sim
         /// Событие HeatReleased при этом сообщает полный ΔH.
         /// </summary>
         public double ReactionHeatFraction { get; set; } = 0.3;
+
+        /// <summary>Как часто проверять шаблонные реакции, тиков (вероятность пересчитывается).</summary>
+        public int ReactionCheckInterval { get; set; } = 4;
 
         // --- Взаимодействие с пользователем ---
         /// <summary>Жёсткость «пружины» захвата рукой/мышью, ккал/(моль·Å²).</summary>
