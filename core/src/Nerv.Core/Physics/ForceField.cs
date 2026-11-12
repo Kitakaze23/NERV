@@ -32,10 +32,11 @@ namespace Nerv.Core.Physics
             for (int i = 0; i < n; i++) f[i] = Vec3.Zero;
 
             double energy = 0;
-            energy += Bonds(w, pos, f);
+            energy += Bonds(w, s, pos, f);
             energy += Angles(w, pos, f);
             energy += Nonbonded(w, s, pos, f, n);
             if (grabs != null) energy += Grabs(w, s, grabs, pos, f);
+            if (s.BoxHalfSize > 0) energy += Walls(s, pos, f, n);
 
             double max = s.MaxForce;
             for (int i = 0; i < n; i++)
@@ -59,7 +60,7 @@ namespace Nerv.Core.Physics
         /// </summary>
         internal static double BondWeight(double progress) => 0.3 + 0.7 * Smooth(progress);
 
-        private static double Bonds(World w, Vec3[] pos, Vec3[] f)
+        private static double Bonds(World w, SimulationSettings s, Vec3[] pos, Vec3[] f)
         {
             double e = 0;
             IReadOnlyList<Bond> bonds = w.Bonds;
@@ -75,6 +76,16 @@ namespace Nerv.Core.Physics
                 double om = 1.0 - ex;
                 e += weight * b.De * om * om;
                 double dEdr = weight * 2.0 * b.De * b.Alpha * ex * om;
+
+                // Пока связь образуется — дополнительная мягкая пружина: потенциал Морзе короткодействующий
+                // и не удержал бы атомы, которые реакция связала на расстоянии контакта.
+                if (!b.IsFormed && r > b.RestLength)
+                {
+                    double kc = s.CaptureStrength / s.CaptureRadius * (1.0 - Smooth(b.Progress));
+                    double x = r - b.RestLength;
+                    e += 0.5 * kc * x * x;
+                    dEdr += kc * x;
+                }
                 Vec3 fi = d * (dEdr / r);
                 f[i] += fi;
                 f[j] -= fi;
@@ -201,6 +212,28 @@ namespace Nerv.Core.Physics
                 }
             }
             return e;
+        }
+
+        /// <summary>Мягкие стенки коробки: гармоническая сила за пределами границы.</summary>
+        private static double Walls(SimulationSettings s, Vec3[] pos, Vec3[] f, int n)
+        {
+            double e = 0, k = s.WallStiffness, l = s.BoxHalfSize;
+            Vec3 c = s.BoxCenter;
+            for (int i = 0; i < n; i++)
+            {
+                Vec3 d = pos[i] - c;
+                double fx = Wall(d.X, l, k, ref e), fy = Wall(d.Y, l, k, ref e), fz = Wall(d.Z, l, k, ref e);
+                f[i] += new Vec3(fx, fy, fz);
+            }
+            return e;
+        }
+
+        private static double Wall(double x, double l, double k, ref double e)
+        {
+            double over = x > l ? x - l : x < -l ? x + l : 0;
+            if (over == 0) return 0;
+            e += 0.5 * k * over * over;
+            return -k * over;
         }
 
         private static double Grabs(World w, SimulationSettings s, IReadOnlyList<GrabSpring> grabs, Vec3[] pos, Vec3[] f)

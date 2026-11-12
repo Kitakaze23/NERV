@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using Nerv.Core.Naming;
 
 namespace Nerv.Core.Model
 {
@@ -13,6 +14,15 @@ namespace Nerv.Core.Model
         public string Formula { get; }
         public int Charge { get; }
         public int BondCount { get; }
+
+        /// <summary>Канонический ключ (заполняется распознаванием после изменения топологии).</summary>
+        public string CanonicalKey { get; internal set; }
+        /// <summary>Запись базы названий, если вещество известно.</summary>
+        public CompoundInfo Compound { get; internal set; }
+        /// <summary>Сведения об ионе, если частица заряжена и есть в таблице ионов.</summary>
+        public IonInfo Ion { get; internal set; }
+        /// <summary>Название для интерфейса или null («неизвестное соединение»).</summary>
+        public string Name => Compound?.NameRu ?? Ion?.NameRu;
 
         internal Molecule(IReadOnlyList<AtomId> atoms, string formula, int charge, int bondCount)
         {

@@ -14,8 +14,8 @@
 | Этап | Что | Статус |
 |---|---|---|
 | 1 | **Ядро симуляции**: модель данных, правила валентности, силовое поле UFF, команды/события, снимки, тесты | ✅ готово |
-| 2 | Каталог реакций (YAML + reaction SMARTS), канонизатор, база названий | ⏳ далее |
-| 3 | Unity-клиент для компьютера: рендер «стекло + неон», ввод лучом, UI | — |
+| 2 | **Реакции и названия**: каталог (YAML + reaction SMARTS), канонизатор, база веществ и ионов, ионные ассоциации | ✅ готово |
+| 3 | Unity-клиент для компьютера: рендер «стекло + неон», ввод лучом, UI | ⏳ далее |
 | 4 | Эффекты, уровни качества, производительность | — |
 
 ## Структура
@@ -25,10 +25,13 @@ core/
   src/Nerv.Core/            ядро (одновременно UPM-пакет com.nerv.core для Unity)
     Numerics/               Vec3, детерминированный ГСЧ xoshiro256**
     Data/                   таблица Менделеева (118), параметры UFF
-    Chemistry/              электронные правила, типизация атомов, формулы (Хилл)
+    Chemistry/              электронные правила, типизация, формулы, граф молекулы, SMILES/SMARTS, канонизатор
+    Naming/                 база названий, таблица ионов, ионные ассоциации, распознавание
+    Reactions/              каталог реакций, мини-YAML, разбор уравнений, валидатор
     Model/                  World (SoA + стабильные AtomId), связи, молекулы
     Physics/                силовое поле, термостат
-    Sim/                    Simulation, команды, события, правила топологии, снимки
+    Sim/                    Simulation, команды, события, правила топологии, движок реакций, снимки
+  data/                     compounds.tsv (база названий), ions.tsv, reactions.yaml (каталог реакций)
   tests/Nerv.Core.Tests/    тесты (свой мини-раннер, без внешних пакетов)
 docs/
   architecture.md
@@ -47,14 +50,19 @@ dotnet run --project tests/Nerv.Core.Tests Water      # фильтр по име
 Тесты проверяют химию, а не конкретные траектории: вода собирается с углом ~104,5°, метан — тетраэдр,
 O=O и N≡N получают кратные связи, CO₂ линейна, Na + Cl → Na⁺Cl⁻, связь H–H рвётся при нагреве,
 силы совпадают с конечными разностями энергии, два прогона с одним seed совпадают побитово.
+Этап 2: канонический ключ не зависит от записи и порядка атомов, вещества распознаются по названию,
+искра поджигает водород (радикальная цепь), метан горит, Na + Cl₂ даёт поваренную соль,
+в воде HCl диссоциирует и нейтрализуется щёлочью.
 
 ## Пример использования ядра
 
 ```csharp
+using Nerv.Core;
 using Nerv.Core.Numerics;
 using Nerv.Core.Sim;
 
-var sim = new Simulation(new SimulationSettings { TargetTemperature = 298 }, seed: 42);
+var data = ChemistryData.LoadDirectory("core/data");   // названия, ионы, реакции (можно и без них)
+var sim = new Simulation(new SimulationSettings { TargetTemperature = 298 }, seed: 42, data: data);
 
 var o  = sim.Apply(new AddAtom("O", new Vec3(0, 0, 0))).Result;
 var h1 = sim.Apply(new AddAtom("H", new Vec3(2.5, 0, 0))).Result;
@@ -62,10 +70,10 @@ var h2 = sim.Apply(new AddAtom("H", new Vec3(-1.25, 2.17, 0))).Result;
 
 sim.Step(6000);                          // 3 пс (шаг 0,5 фс)
 
-foreach (var m in sim.World.Molecules)   // → H2O
-    System.Console.WriteLine(m.Formula);
+foreach (var m in sim.World.Molecules)   // → H2O «Вода»
+    System.Console.WriteLine(m.Formula + " «" + m.Name + "»");
 
-foreach (var e in sim.Events)            // BondForming, BondFormed, TopologyChanged…
+foreach (var e in sim.Events)            // BondForming, BondFormed, MoleculeIdentified «Вода»…
     System.Console.WriteLine(e);
 
 var snapshot = new WorldSnapshot();      // для рендера: без аллокаций в кадре
@@ -74,6 +82,15 @@ sim.WriteSnapshot(snapshot);
 
 Все изменения мира — команды (`AddAtom`, `RemoveAtom`, `Grab`/`MoveGrab`/`Release`, `SetTemperature`,
 `SetMedium`, `Spark`, …). Они пишутся в журнал: отсюда повторы, сохранения и будущий мультиплеер.
+
+## Химические данные
+
+- `core/data/compounds.tsv` — база названий (курируемое ядро): SMILES, русское и тривиальные названия, категория, опасность, факты.
+- `core/data/ions.tsv` — ионы: название иона и часть названия соли («хлорид» + «натрия»).
+- `core/data/reactions.yaml` — каталог реакций: шаги в reaction SMARTS с картой атомов, Ea, ΔH, условия, тексты.
+  Каталог проверяется при загрузке (сохранение атомов и заряда, валентности, баланс итогового уравнения).
+
+Чтобы добавить вещество или реакцию, достаточно отредактировать эти файлы — код менять не нужно.
 
 ## Подключение к Unity (этап 3)
 

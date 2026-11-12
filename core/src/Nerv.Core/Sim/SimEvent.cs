@@ -17,7 +17,16 @@ namespace Nerv.Core.Sim
         /// <summary>Электрон перешёл от A (металл) к B (неметалл).</summary>
         ElectronTransferred,
         /// <summary>Изменилась топология (состав молекул). Value = версия топологии.</summary>
-        TopologyChanged
+        TopologyChanged,
+        /// <summary>
+        /// Появилась известная частица. Text = название, A = один из её атомов,
+        /// Value = 0 для молекулы/иона, 1 для ионного соединения (ассоциации ионов).
+        /// </summary>
+        MoleculeIdentified,
+        /// <summary>Сработала реакция из каталога. Text = id реакции, Value = индекс в Simulation.ReactionLog.</summary>
+        ReactionFired,
+        /// <summary>Выделилось (Value &gt; 0) или поглотилось тепло, кДж/моль. Text = пресет эффекта.</summary>
+        HeatReleased
     }
 
     /// <summary>
@@ -31,16 +40,18 @@ namespace Nerv.Core.Sim
         public readonly AtomId A;
         public readonly AtomId B;
         public readonly int Value;
+        public readonly string Text;
 
-        public SimEvent(SimEventType type, long tick, AtomId a, AtomId b, int value)
+        public SimEvent(SimEventType type, long tick, AtomId a, AtomId b, int value, string text = null)
         {
             Type = type;
             Tick = tick;
             A = a;
             B = b;
             Value = value;
+            Text = text;
         }
 
-        public override string ToString() => "[" + Tick + "] " + Type + " " + A + " " + B + " " + Value;
+        public override string ToString() => "[" + Tick + "] " + Type + " " + A + " " + B + " " + Value + (Text != null ? " «" + Text + "»" : "");
     }
 }

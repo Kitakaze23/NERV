@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using Nerv.Core.Model;
+using Nerv.Core.Naming;
 
 namespace Nerv.Core.Sim
 {
@@ -36,6 +37,8 @@ namespace Nerv.Core.Sim
         public readonly List<BondView> Bonds = new List<BondView>();
         /// <summary>Молекулы (неизменяемые объекты, безопасно держать ссылки).</summary>
         public IReadOnlyList<Molecule> Molecules = Array.Empty<Molecule>();
+        /// <summary>Ионные ассоциации (соли), неизменяемые объекты.</summary>
+        public IReadOnlyList<IonicGroup> IonicGroups = Array.Empty<IonicGroup>();
 
         internal void EnsureCapacity(int n)
         {

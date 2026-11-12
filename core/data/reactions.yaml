@@ -1,0 +1,190 @@
+# Каталог реакций NERV.
+#
+# Каждая запись — один элементарный шаг: не более двух частиц. Суммарные реакции раскладываются на шаги
+# с общей группой (group) и итоговым уравнением (education.summary). Проверка при загрузке:
+# сохранение атомов и заряда, валентности продуктов, баланс итогового уравнения, сумма шагов = итог.
+#
+# mechanism: chain — радикальная цепь: шаги повторяются разное число раз, поэтому сумма шагов
+#   с итоговым уравнением не сравнивается (проверяется баланс каждого шага и самого итога).
+# smarts — reaction SMARTS с картой атомов (:1, :2 …): карта говорит, какой атом куда переходит.
+#   Диалект NERV: заряд, не указанный в шаблоне реагентов, означает «заряд 0»;
+#   Dn — число связей атома, Hn — число соседей-водородов; водороды пишутся явно ([H:2]).
+# activationEnergy — кДж/моль (игровая шкала: радикальные шаги ускорены, чтобы пламя шло за секунды
+#   экранного времени; инициирование по-прежнему требует искры), deltaH — кДж/моль (реальные теплоты образования, газ).
+# rate — игровой коэффициент темпа: вероятность за проверку при очень высокой температуре.
+
+# ---------- Горение водорода: 2H₂ + O₂ → 2H₂O ----------
+
+- id: h2_combustion_1
+  group: h2_combustion
+  name: Горение водорода — шаг 1
+  smarts: "[H:1][H:2].[O:3]=[O:4]>>[H:1][O:3][H:2].[O:4]"
+  activationEnergy: 120
+  deltaH: 7
+  rate: 0.2
+  conditions:
+    medium: [vacuum]
+  effects: combustion_flash
+  education:
+    summary: "2H₂ + O₂ → 2H₂O"
+    textRu: "Чтобы реакция началась, нужна искра: она разрывает прочные связи. Первый шаг почти не даёт тепла, зато освобождает атом кислорода — он запускает цепь."
+    level: school
+    mechanism: chain
+  tags: [горение, экзотермическая, цепная]
+
+- id: h2_chain_o
+  group: h2_combustion
+  name: Горение водорода — атом O отрывает водород
+  smarts: "[O;D0:1].[H:2][H:3]>>[O:1][H:2].[H:3]"
+  activationEnergy: 15
+  deltaH: 8
+  rate: 0.5
+  conditions:
+    medium: [vacuum]
+  effects: combustion_flash
+  education:
+    summary: "2H₂ + O₂ → 2H₂O"
+    textRu: "Атом кислорода отрывает водород: получаются сразу две активные частицы — OH и H. Так цепь разветвляется."
+    level: school
+    mechanism: chain
+  tags: [горение, цепная, радикалы]
+
+- id: h2_chain_oh
+  group: h2_combustion
+  name: Горение водорода — OH + H₂
+  smarts: "[O;D1:1][H:2].[H:3][H:4]>>[H:2][O:1][H:3].[H:4]"
+  activationEnergy: 10
+  deltaH: -62
+  rate: 0.5
+  conditions:
+    medium: [vacuum]
+  effects: combustion_flash
+  education:
+    summary: "2H₂ + O₂ → 2H₂O"
+    textRu: "Гидроксил забирает атом водорода — получается вода и новый атом H, который продолжает цепь."
+    level: school
+    mechanism: chain
+  tags: [горение, экзотермическая, цепная, радикалы]
+
+- id: h2_chain_h
+  group: h2_combustion
+  name: Горение водорода — H + O₂ (разветвление)
+  smarts: "[H;D0:1].[O:2]=[O:3]>>[H:1][O:2].[O:3]"
+  activationEnergy: 30
+  deltaH: 70
+  rate: 0.5
+  conditions:
+    medium: [vacuum]
+  effects: combustion_flash
+  education:
+    summary: "2H₂ + O₂ → 2H₂O"
+    textRu: "Атом водорода разбивает молекулу кислорода: из одной активной частицы получаются две. Поэтому смесь водорода с кислородом взрывается."
+    level: school
+    mechanism: chain
+  tags: [горение, цепная, радикалы]
+
+# ---------- Горение метана: CH₄ + 2O₂ → CO₂ + 2H₂O ----------
+
+- id: ch4_combustion_1
+  group: ch4_combustion
+  name: Горение метана — шаг 1
+  smarts: "[C:1]([H:2])([H:3])([H:4])[H:5].[O:6]=[O:7]>>[C:1]([H:4])([H:5])=[O:6].[H:2][O:7][H:3]"
+  activationEnergy: 90
+  deltaH: -276
+  rate: 0.3
+  conditions:
+    medium: [vacuum]
+  effects: combustion_flash
+  education:
+    summary: "CH₄ + 2O₂ → CO₂ + 2H₂O"
+    textRu: "Метан окисляется до формальдегида и воды. Это упрощение: настоящее горение идёт через десятки шагов с радикалами."
+    level: school
+    mechanism: simplified
+  tags: [горение, экзотермическая]
+
+- id: ch4_combustion_2
+  group: ch4_combustion
+  name: Горение метана — шаг 2
+  smarts: "[C:1]([H:2])([H:3])=[O:4].[O:5]=[O:6]>>[O:4]=[C:1]=[O:5].[H:2][O:6][H:3]"
+  activationEnergy: 40
+  deltaH: -527
+  rate: 0.4
+  conditions:
+    medium: [vacuum]
+  effects: combustion_flash
+  education:
+    summary: "CH₄ + 2O₂ → CO₂ + 2H₂O"
+    textRu: "Формальдегид догорает до углекислого газа и воды."
+    level: school
+    mechanism: simplified
+  tags: [горение, экзотермическая]
+
+# ---------- Натрий и хлор: 2Na + Cl₂ → 2NaCl ----------
+
+- id: na_cl2_1
+  group: na_cl2
+  name: Натрий и хлор — шаг 1
+  smarts: "[Na;D0:1].[Cl:2][Cl:3]>>[Na+:1].[Cl-:2].[Cl:3]"
+  activationEnergy: 5
+  deltaH: -290
+  rate: 0.3
+  conditions:
+    medium: [vacuum]
+  effects: ionic_flash
+  education:
+    summary: "2Na + Cl₂ → 2NaCl"
+    textRu: "Натрий отдаёт свой единственный внешний электрон хлору: получаются ионы Na⁺ и Cl⁻, а второй атом хлора освобождается."
+    level: school
+    mechanism: simplified
+  tags: [ионная связь, экзотермическая]
+
+- id: na_cl2_2
+  group: na_cl2
+  name: Натрий и хлор — шаг 2
+  smarts: "[Na;D0:1].[Cl;D0:2]>>[Na+:1].[Cl-:2]"
+  activationEnergy: 0
+  deltaH: -532
+  rate: 0.5
+  conditions:
+    medium: [vacuum]
+  effects: ionic_flash
+  education:
+    summary: "2Na + Cl₂ → 2NaCl"
+    textRu: "Свободный атом хлора забирает электрон у второго атома натрия. Ионы притягиваются и складываются в кристалл."
+    level: school
+    mechanism: simplified
+  tags: [ионная связь, экзотермическая]
+
+# ---------- Кислота в воде: HCl → H⁺ + Cl⁻ ----------
+
+- id: hcl_dissociation
+  name: Диссоциация хлороводорода
+  smarts: "[H:1][Cl:2]>>[H+:1].[Cl-:2]"
+  activationEnergy: 5
+  deltaH: -75
+  rate: 0.02
+  conditions:
+    medium: [water]
+  effects: dissolve
+  education:
+    summary: "HCl → H⁺ + Cl⁻"
+    textRu: "В воде хлороводород распадается на ионы — так получается соляная кислота."
+    level: school
+  tags: [диссоциация, кислота]
+
+# ---------- Нейтрализация: H⁺ + OH⁻ → H₂O ----------
+
+- id: neutralization
+  name: Нейтрализация
+  smarts: "[H+:1].[O-;D1:2][H:3]>>[H:1][O:2][H:3]"
+  activationEnergy: 0
+  deltaH: -56
+  rate: 0.5
+  conditions:
+    medium: [water]
+  effects: neutralization
+  education:
+    summary: "H⁺ + OH⁻ → H₂O"
+    textRu: "Ион водорода из кислоты встречает гидроксид-ион из щёлочи — получается вода. Это суть любой реакции нейтрализации, например HCl + NaOH → NaCl + H₂O."
+    level: school
+  tags: [нейтрализация, экзотермическая]

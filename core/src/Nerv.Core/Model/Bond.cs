@@ -15,6 +15,9 @@ namespace Nerv.Core.Model
         /// <summary>Полярность по разнице электроотрицательностей (|ΔЭО| &gt; 0.4).</summary>
         public bool IsPolar { get; internal set; }
 
+        /// <summary>Связь создана реакцией из каталога: её энергия уже учтена в ΔH, гасить скорость не нужно.</summary>
+        public bool FromReaction { get; internal set; }
+
         // Кэш топологии (пересчитывается в World.RebuildTopology).
         internal int Ia, Ib;
         /// <summary>Равновесная длина, Å.</summary>

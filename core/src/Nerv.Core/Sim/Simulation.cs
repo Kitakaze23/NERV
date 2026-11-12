@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using Nerv.Core.Data;
 using Nerv.Core.Model;
+using Nerv.Core.Naming;
 using Nerv.Core.Numerics;
 using Nerv.Core.Physics;
 
@@ -18,6 +19,11 @@ namespace Nerv.Core.Sim
         public SimulationSettings Settings { get; }
         public long Tick { get; private set; }
         public ulong Seed { get; }
+        /// <summary>Химические данные (названия, ионы, реакции). Без них ядро работает только на правилах валентности.</summary>
+        public ChemistryData Data { get; }
+
+        /// <summary>Как часто пересчитывать ионные ассоциации, тиков.</summary>
+        public int IonicGroupInterval { get; set; } = 25;
 
         /// <summary>Потенциальная энергия на последнем шаге, ккал/моль.</summary>
         public double PotentialEnergy { get; private set; }
@@ -29,13 +35,16 @@ namespace Nerv.Core.Sim
         private readonly SortedDictionary<int, GrabSpring> _grabs = new SortedDictionary<int, GrabSpring>();
         private readonly List<GrabSpring> _grabList = new List<GrabSpring>();
         private readonly TopologyRules _rules = new TopologyRules();
+        private readonly Identifier _identifier = new Identifier();
+        private readonly List<ReactionRecord> _reactionLog = new List<ReactionRecord>();
         private bool _forcesStale = true;
         private int _lastTopologyVersion = -1;
 
-        public Simulation(SimulationSettings settings = null, ulong seed = 1)
+        public Simulation(SimulationSettings settings = null, ulong seed = 1, ChemistryData data = null)
         {
             Settings = settings ?? new SimulationSettings();
             Seed = seed;
+            Data = data;
             _rng = new Xoshiro256(seed);
             World.BondEnergyPerOrder = Settings.BondEnergyPerOrder;
         }
@@ -46,6 +55,20 @@ namespace Nerv.Core.Sim
 
         /// <summary>Журнал выполненных команд с номером тика — для повторов и сохранений.</summary>
         public IReadOnlyList<KeyValuePair<long, Command>> CommandLog => _log;
+
+        /// <summary>Журнал сработавших реакций каталога.</summary>
+        public IReadOnlyList<ReactionRecord> ReactionLog => _reactionLog;
+
+        /// <summary>Ионные ассоциации (кристаллики солей); в воде — пусто.</summary>
+        public IReadOnlyList<IonicGroup> IonicGroups => _identifier.Groups;
+
+        internal Xoshiro256 Rng => _rng;
+
+        internal int AddReactionRecord(ReactionRecord record)
+        {
+            _reactionLog.Add(record);
+            return _reactionLog.Count - 1;
+        }
 
         public double Temperature => Thermostat.Temperature(World);
         public double KineticEnergy => Thermostat.KineticEnergy(World);
@@ -121,11 +144,16 @@ namespace Nerv.Core.Sim
 
             AdvanceBondProgress();
 
-            if (w.TopologyVersion != _lastTopologyVersion)
+            w.EnsureTopology();
+            bool topologyChanged = w.TopologyVersion != _lastTopologyVersion;
+            if (topologyChanged)
             {
                 _lastTopologyVersion = w.TopologyVersion;
                 Emit(SimEventType.TopologyChanged, AtomId.None, AtomId.None, w.TopologyVersion);
+                _identifier.IdentifyMolecules(this);
             }
+            if (topologyChanged || Tick % Math.Max(1, IonicGroupInterval) == 0)
+                _identifier.UpdateGroups(this);
 
             Tick++;
         }
@@ -147,8 +175,15 @@ namespace Nerv.Core.Sim
                 Bond b = bonds[k];
                 if (b.IsFormed) continue;
 
-                // Гасим относительное движение пары, сохраняя импульс центра масс.
+                // Гасим относительное движение пары, сохраняя импульс центра масс
+                // (для связей из реакций энергия уже учтена в ΔH).
                 int i = b.Ia, j = b.Ib;
+                if (b.FromReaction)
+                {
+                    b.Progress = Math.Min(1.0, b.Progress + inc);
+                    if (b.IsFormed) Emit(SimEventType.BondFormed, b.A, b.B, b.Id);
+                    continue;
+                }
                 double mi = w.Masses[i], mj = w.Masses[j];
                 Vec3 vcm = (w.Velocities[i] * mi + w.Velocities[j] * mj) / (mi + mj);
                 w.Velocities[i] = vcm + (w.Velocities[i] - vcm) * keep;
@@ -159,8 +194,8 @@ namespace Nerv.Core.Sim
             }
         }
 
-        internal void Emit(SimEventType type, AtomId a, AtomId b, int value) =>
-            _events.Add(new SimEvent(type, Tick, a, b, value));
+        internal void Emit(SimEventType type, AtomId a, AtomId b, int value, string text = null) =>
+            _events.Add(new SimEvent(type, Tick, a, b, value, text));
 
         // ================= Снимок =================
 
@@ -200,6 +235,7 @@ namespace Nerv.Core.Sim
                 });
             }
             snap.Molecules = new List<Molecule>(w.Molecules);
+            snap.IonicGroups = new List<IonicGroup>(_identifier.Groups);
         }
 
         // ================= Исполнение команд =================

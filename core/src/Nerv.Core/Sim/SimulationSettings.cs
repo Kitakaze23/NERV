@@ -11,7 +11,10 @@ namespace Nerv.Core.Sim
         /// <summary>Целевая температура термостата, K.</summary>
         public double TargetTemperature { get; set; } = 298.0;
         public bool ThermostatEnabled { get; set; } = true;
-        /// <summary>Время релаксации термостата Берендсена, фс.</summary>
+        /// <summary>
+        /// Время релаксации термостата Берендсена, фс. Больше — тепло реакций дольше греет соседей,
+        /// но и свежесобранные молекулы чаще разваливаются от собственного тепла образования.
+        /// </summary>
         public double ThermostatTauFs { get; set; } = 100.0;
         /// <summary>
         /// Скорость времени для клиента (сколько тиков делать за кадр). Ядро её только хранит:
@@ -23,6 +26,14 @@ namespace Nerv.Core.Sim
         public Medium Medium { get; set; } = Medium.Vacuum;
         public double WaterDielectric { get; set; } = 80.0;
         public double Dielectric => Medium == Medium.Water ? WaterDielectric : 1.0;
+
+        // --- Границы сцены ---
+        /// <summary>Центр «коробки» сцены, Å.</summary>
+        public Numerics.Vec3 BoxCenter { get; set; } = Numerics.Vec3.Zero;
+        /// <summary>Половина ребра коробки с мягкими стенками, Å (0 — без стенок, открытое пространство).</summary>
+        public double BoxHalfSize { get; set; } = 0.0;
+        /// <summary>Жёсткость стенок коробки, ккал/(моль·Å²).</summary>
+        public double WallStiffness { get; set; } = 10.0;
 
         // --- Невалентные взаимодействия ---
         /// <summary>Радиус отсечки Ван-дер-Ваальса, Å.</summary>
@@ -56,6 +67,14 @@ namespace Nerv.Core.Sim
         public double BondEnergyPerOrder { get; set; } = 70.0;
         /// <summary>Связь рвётся, когда энергия Морзе превышает эту долю глубины ямы.</summary>
         public double BondBreakEnergyFraction { get; set; } = 0.81;
+
+        /// <summary>
+        /// Доля теплового эффекта реакции, которая остаётся в сцене как кинетическая энергия соседних атомов.
+        /// Остальное считается ушедшим в окружающую среду (излучение, не моделируемый газ): иначе в сцене
+        /// из десятков атомов каждая реакция разогревала бы всё до десятков тысяч кельвинов.
+        /// Событие HeatReleased при этом сообщает полный ΔH.
+        /// </summary>
+        public double ReactionHeatFraction { get; set; } = 0.3;
 
         // --- Взаимодействие с пользователем ---
         /// <summary>Жёсткость «пружины» захвата рукой/мышью, ккал/(моль·Å²).</summary>

@@ -20,6 +20,7 @@ namespace Nerv.Core.Sim
             public bool Ionic;
         }
 
+        private readonly ReactionEngine _reactions = new ReactionEngine();
         private readonly List<Candidate> _candidates = new List<Candidate>();
         private readonly List<Bond> _bondScratch = new List<Bond>();
         private int[] _free = new int[64];
@@ -32,7 +33,8 @@ namespace Nerv.Core.Sim
             w.EnsureTopology();
             SimulationSettings s = sim.Settings;
 
-            bool changed = FormBonds(sim, w, s);
+            bool changed = _reactions.Apply(sim);
+            changed |= FormBonds(sim, w, s);
             changed |= BreakBonds(sim, w, s);
             if (!changed) changed |= UpgradeOrders(sim, w, s);
             return changed;
@@ -40,6 +42,7 @@ namespace Nerv.Core.Sim
 
         private bool FormBonds(Simulation sim, World w, SimulationSettings s)
         {
+            w.EnsureTopology();
             int n = w.AtomCount;
             if (_free.Length < n)
             {
@@ -126,7 +129,8 @@ namespace Nerv.Core.Sim
             {
                 Bond b = bonds[k];
                 double r = Vec3.Distance(w.Positions[b.Ia], w.Positions[b.Ib]);
-                double limit = b.IsFormed ? b.RestLength + breakShift / b.Alpha : s.CaptureRadius;
+                // Образующуюся связь отменяем, только если атомы разлетелись далеко за радиус захвата.
+                double limit = b.IsFormed ? b.RestLength + breakShift / b.Alpha : 1.5 * s.CaptureRadius;
                 if (r > limit) _bondScratch.Add(b);
             }
 
