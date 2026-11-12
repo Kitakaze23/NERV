@@ -1,3 +1,4 @@
+using System.Linq;
 using Nerv.Core.Chemistry;
 using Nerv.Core.Data;
 
@@ -9,6 +10,9 @@ namespace Nerv.Core.Tests
         public static void ElementTable_Has118ElementsWithLayout()
         {
             Assert.Equal(118, ElementTable.All.Count, "число элементов");
+            Assert.Equal("Железо", ElementTable.Get(26).NameRu);
+            Assert.Equal("Оганесон", ElementTable.Get(118).NameRu);
+            Assert.True(ElementTable.All.All(e => !string.IsNullOrEmpty(e.NameRu)), "у всех элементов есть русское название");
             Assert.Equal(8, ElementTable.Get("O").Z);
             Assert.Equal("Og", ElementTable.Get(118).Symbol);
 

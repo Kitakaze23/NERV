@@ -16,6 +16,8 @@ namespace Nerv.Client
     {
         /// <summary>Курсор над панелью интерфейса (камера и инструменты его игнорируют).</summary>
         public static bool PointerOverUi { get; private set; }
+        /// <summary>Левый край правой панели в пикселях экрана (карточка вещества встаёт левее).</summary>
+        public static float RightPanelLeftPx { get; private set; } = 99999f;
 
         private NervInteraction _interaction;
         private readonly List<Rect> _panels = new List<Rect>();
@@ -109,6 +111,9 @@ namespace Nerv.Client
             float w = Screen.width / _uiScale, h = Screen.height / _uiScale;
 
             _panels.Clear();
+            RightPanelLeftPx = (w - 266f) * _uiScale;
+            // Под открытой таблицей Менделеева HUD не рисуем: IMGUI лёг бы поверх неё.
+            if (UI.PeriodicTablePanel.Instance != null && UI.PeriodicTablePanel.Instance.IsOpen) return;
             DrawLabels(app);
             DrawLeft(app, h);
             DrawRight(app, w, h);
@@ -137,6 +142,8 @@ namespace Nerv.Client
 
             GUILayout.Space(8);
             GUILayout.Label("ЭЛЕМЕНТЫ  (клавиши 1–8)", _small);
+            if (GUILayout.Button("Таблица Менделеева  (T)", _button, GUILayout.Height(28)))
+                UI.PeriodicTablePanel.Instance?.Toggle();
             for (int row = 0; row < 2; row++)
             {
                 GUILayout.BeginHorizontal();
@@ -169,7 +176,7 @@ namespace Nerv.Client
                 GUILayout.Label(current.Hint, _small);
             }
             GUILayout.FlexibleSpace();
-            GUILayout.Label("ПКМ — вращать · колесо — приблизить\nShift+ПКМ — сдвиг · Пробел — пауза", _small);
+            GUILayout.Label("Щелчок по атому рукой — карточка вещества\nПКМ — вращать · колесо — приблизить\nShift+ПКМ — сдвиг · Пробел — пауза", _small);
             GUILayout.EndArea();
         }
 

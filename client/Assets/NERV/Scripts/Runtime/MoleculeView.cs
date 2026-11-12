@@ -45,6 +45,8 @@ namespace Nerv.Client
 
         /// <summary>Атом под курсором (индекс снимка) — для подсветки.</summary>
         public int HoverIndex = -1;
+        /// <summary>Атомы молекулы, открытой в карточке вещества, — для подсветки.</summary>
+        public readonly HashSet<AtomId> Selected = new HashSet<AtomId>();
         /// <summary>Схваченный атом — для подсветки.</summary>
         public int GrabbedIndex = -1;
 
@@ -218,7 +220,9 @@ namespace Nerv.Client
                 Vector3 p = app.AtomWorld(i);
                 float r = VisualRadius(e) * s;
                 List(_atoms, e.Z).Add(Matrix4x4.TRS(p, Quaternion.identity, Vector3.one * (2f * r)));
-                if (i == HoverIndex || i == GrabbedIndex)
+                if (Selected.Count > 0 && Selected.Contains(snap.Ids[i]))
+                    _highlight.Add(Matrix4x4.TRS(p, Quaternion.identity, Vector3.one * (2f * r * 1.4f)));
+                else if (i == HoverIndex || i == GrabbedIndex)
                     _highlight.Add(Matrix4x4.TRS(p, Quaternion.identity, Vector3.one * (2f * r * (i == GrabbedIndex ? 1.7f : 1.5f))));
                 float tRaw = snap.Temperatures[i];
                 float heat = _heat.TryGetValue(snap.Ids[i], out float prevHeat) ? Mathf.Lerp(prevHeat, tRaw, heatK) : (float)snap.Temperature;

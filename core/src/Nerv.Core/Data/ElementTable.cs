@@ -18,6 +18,19 @@ namespace Nerv.Core.Data
             "Hf Ta W Re Os Ir Pt Au Hg Tl Pb Bi Po At Rn Fr Ra Ac Th Pa U Np Pu Am Cm Bk Cf Es Fm Md No Lr " +
             "Rf Db Sg Bh Hs Mt Ds Rg Cn Nh Fl Mc Lv Ts Og";
 
+        /// <summary>Русские названия всех 118 элементов (для таблицы; подробные данные — только у элементов MVP).</summary>
+        private const string NamesRu =
+            "Водород Гелий Литий Бериллий Бор Углерод Азот Кислород Фтор Неон Натрий Магний Алюминий Кремний " +
+            "Фосфор Сера Хлор Аргон Калий Кальций Скандий Титан Ванадий Хром Марганец Железо Кобальт Никель " +
+            "Медь Цинк Галлий Германий Мышьяк Селен Бром Криптон Рубидий Стронций Иттрий Цирконий Ниобий " +
+            "Молибден Технеций Рутений Родий Палладий Серебро Кадмий Индий Олово Сурьма Теллур Иод Ксенон " +
+            "Цезий Барий Лантан Церий Празеодим Неодим Прометий Самарий Европий Гадолиний Тербий Диспрозий " +
+            "Гольмий Эрбий Тулий Иттербий Лютеций Гафний Тантал Вольфрам Рений Осмий Иридий Платина Золото " +
+            "Ртуть Таллий Свинец Висмут Полоний Астат Радон Франций Радий Актиний Торий Протактиний Уран " +
+            "Нептуний Плутоний Америций Кюрий Берклий Калифорний Эйнштейний Фермий Менделевий Нобелий " +
+            "Лоуренсий Резерфордий Дубний Сиборгий Борий Хассий Мейтнерий Дармштадтий Рентгений Коперниций " +
+            "Нихоний Флеровий Московий Ливерморий Теннессин Оганесон";
+
         private static readonly Element[] ByZ = new Element[Count + 1];
         private static readonly Dictionary<string, Element> BySymbol = new Dictionary<string, Element>(StringComparer.Ordinal);
         private static readonly Element[] AllElements = new Element[Count];
@@ -50,6 +63,7 @@ namespace Nerv.Core.Data
         static ElementTable()
         {
             string[] symbols = Symbols.Split(' ');
+            string[] namesRu = NamesRu.Split(' ');
             if (symbols.Length != Count) throw new InvalidOperationException("Таблица символов повреждена.");
 
             for (int z = 1; z <= Count; z++)
@@ -60,7 +74,7 @@ namespace Nerv.Core.Data
                 Element e = Details.TryGetValue(s, out Detail d)
                     ? new Element(z, s, d.NameRu, d.NameEn, d.Mass, d.En, d.Valence, d.Cov, d.Vdw, d.Color,
                         period, group, row, column, cat, d.Availability)
-                    : new Element(z, s, null, null, 0, double.NaN, 0, 0, 0, 0x808080,
+                    : new Element(z, s, namesRu[z - 1], null, 0, double.NaN, 0, 0, 0, 0x808080,
                         period, group, row, column, cat, ElementAvailability.ComingSoon);
                 ByZ[z] = e;
                 AllElements[z - 1] = e;

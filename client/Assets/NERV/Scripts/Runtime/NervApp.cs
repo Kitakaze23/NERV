@@ -48,6 +48,8 @@ namespace Nerv.Client
             gameObject.AddComponent<NervInteraction>();
             gameObject.AddComponent<NervEffects>();
             gameObject.AddComponent<NervDirector>();
+            gameObject.AddComponent<UI.PeriodicTablePanel>();
+            gameObject.AddComponent<UI.MoleculeCardPanel>();
             gameObject.AddComponent<NervHud>();
             NervEnvironment.MainCamera.gameObject.AddComponent<NervCameraController>();
 

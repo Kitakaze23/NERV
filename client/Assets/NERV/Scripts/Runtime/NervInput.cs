@@ -160,6 +160,19 @@ namespace Nerv.Client
             }
         }
 
+        /// <summary>Клавиша T — таблица Менделеева.</summary>
+        public static bool TablePressed
+        {
+            get
+            {
+#if ENABLE_INPUT_SYSTEM
+                return Keyboard.current != null && Keyboard.current.tKey.wasPressedThisFrame;
+#else
+                return Input.GetKeyDown(KeyCode.T);
+#endif
+            }
+        }
+
         public static bool EscapePressed
         {
             get

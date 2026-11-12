@@ -32,6 +32,10 @@ namespace Nerv.Client
         private AtomId _grabbed = AtomId.None;
         private float _grabDepth;
         private LineRenderer _spring;
+        // Щелчок (без перетаскивания) по атому рукой открывает карточку вещества.
+        private Vector2 _pressPos;
+        private float _pressTime;
+        private AtomId _pressAtom = AtomId.None;
 
         public static readonly string[] Palette = { "H", "C", "N", "O", "Na", "Cl", "S", "F" };
 
@@ -63,11 +67,18 @@ namespace Nerv.Client
                 Element = Palette[digit - 1];
                 Tool = NervTool.Place;
             }
-            if (NervInput.EscapePressed) Tool = NervTool.Hand;
+            if (NervInput.TablePressed) UI.PeriodicTablePanel.Instance?.Toggle();
+            if (NervInput.EscapePressed)
+            {
+                // Esc сначала закрывает панели, потом сбрасывает инструмент.
+                if (UI.PeriodicTablePanel.Instance != null && UI.PeriodicTablePanel.Instance.IsOpen) UI.PeriodicTablePanel.Instance.Close();
+                else if (UI.MoleculeCardPanel.Instance != null && UI.MoleculeCardPanel.Instance.IsOpen) UI.MoleculeCardPanel.Instance.Close();
+                else Tool = NervTool.Hand;
+            }
             if (NervInput.SpacePressed) app.Paused = !app.Paused;
 
             Ray ray = cam.ScreenPointToRay(NervInput.PointerPosition);
-            bool overUi = NervHud.PointerOverUi;
+            bool overUi = NervHud.PointerOverUi || UI.NervUI.PointerOverUi;
             int hit = overUi ? -1 : Pick(app, ray);
             _view.HoverIndex = (Tool == NervTool.Hand || Tool == NervTool.Erase) ? hit : -1;
 
@@ -80,6 +91,9 @@ namespace Nerv.Client
                         if (hit >= 0)
                         {
                             _grabbed = app.Snapshot.Ids[hit];
+                            _pressAtom = _grabbed;
+                            _pressPos = NervInput.PointerPosition;
+                            _pressTime = Time.unscaledTime;
                             Vector3 p = app.AtomWorld(hit);
                             _grabDepth = Vector3.Dot(p - cam.transform.position, cam.transform.forward);
                             app.Submit(new Grab(_grabbed, NervApp.ToSim(p)));
@@ -124,6 +138,10 @@ namespace Nerv.Client
             }
             else
             {
+                if (_pressAtom == _grabbed && (NervInput.PointerPosition - _pressPos).sqrMagnitude < 36f &&
+                    Time.unscaledTime - _pressTime < 0.35f)
+                    UI.MoleculeCardPanel.Instance?.Open(_grabbed);
+                _pressAtom = AtomId.None;
                 app.Submit(new Release());
                 _grabbed = AtomId.None;
                 _view.GrabbedIndex = -1;

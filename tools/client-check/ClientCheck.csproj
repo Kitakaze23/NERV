@@ -1,0 +1,25 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <!--
+    Проверка компиляции клиента Unity без Unity: собирает client/Assets/NERV/Scripts/Runtime
+    против библиотек Unity. Библиотеки в репозиторий не кладутся: путь к папке с ними — свойство UnityRefs
+    (UnityEngine.*Module.dll из Unity.app/Contents/Resources/Scripting/Managed/UnityEngine и
+    UnityEngine.UI / Unity.InputSystem / Unity.RenderPipelines.* из client/Library/ScriptAssemblies).
+    Запуск: dotnet build tools/client-check -p:UnityRefs=/путь/к/refs
+  -->
+  <PropertyGroup>
+    <TargetFramework>netstandard2.1</TargetFramework>
+    <LangVersion>9.0</LangVersion>
+    <Nullable>disable</Nullable>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <DefineConstants>ENABLE_INPUT_SYSTEM;ENABLE_LEGACY_INPUT_MANAGER;UNITY_6000_0_OR_NEWER</DefineConstants>
+    <NoWarn>CS0649;CS0169;CS0414;CS1701;CS1702</NoWarn>
+    <UnityRefs Condition="'$(UnityRefs)' == ''">/home/claude/unitycheck/refs</UnityRefs>
+    <BaseIntermediateOutputPath>$(MSBuildThisFileDirectory)../../core/artifacts/obj/ClientCheck/</BaseIntermediateOutputPath>
+    <OutputPath>$(MSBuildThisFileDirectory)../../core/artifacts/bin/ClientCheck/</OutputPath>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="../../client/Assets/NERV/Scripts/Runtime/**/*.cs" />
+    <ProjectReference Include="../../core/src/Nerv.Core/Nerv.Core.csproj" />
+    <Reference Include="$(UnityRefs)/*.dll" Exclude="$(UnityRefs)/UnityEditor*.dll" Private="false" />
+  </ItemGroup>
+</Project>
