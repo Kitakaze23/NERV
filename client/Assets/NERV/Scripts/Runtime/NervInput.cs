@@ -148,6 +148,38 @@ namespace Nerv.Client
             }
         }
 
+        private static bool CommandHeld
+        {
+            get
+            {
+#if ENABLE_INPUT_SYSTEM
+                Keyboard k = Keyboard.current;
+                return k != null && (k.leftCtrlKey.isPressed || k.rightCtrlKey.isPressed ||
+                                     k.leftCommandKey.isPressed || k.rightCommandKey.isPressed);
+#else
+                return Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl) ||
+                       Input.GetKey(KeyCode.LeftCommand) || Input.GetKey(KeyCode.RightCommand);
+#endif
+            }
+        }
+
+        private static bool KeyDown(char key)
+        {
+#if ENABLE_INPUT_SYSTEM
+            Keyboard k = Keyboard.current;
+            if (k == null) return false;
+            return key == 'z' ? k.zKey.wasPressedThisFrame : k.yKey.wasPressedThisFrame;
+#else
+            return Input.GetKeyDown(key == 'z' ? KeyCode.Z : KeyCode.Y);
+#endif
+        }
+
+        /// <summary>Cmd/Ctrl+Z.</summary>
+        public static bool UndoPressed => CommandHeld && !ShiftHeld && KeyDown('z');
+
+        /// <summary>Cmd/Ctrl+Shift+Z или Ctrl+Y.</summary>
+        public static bool RedoPressed => CommandHeld && ((ShiftHeld && KeyDown('z')) || KeyDown('y'));
+
         public static bool SpacePressed
         {
             get

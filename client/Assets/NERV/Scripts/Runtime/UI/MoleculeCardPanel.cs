@@ -247,6 +247,7 @@ namespace Nerv.Client.UI
             if (count > 0) c /= count;
             // Сбоку от исходной, примерно в плоскости экрана.
             var at = new Nerv.Core.Numerics.Vec3(c.x + 6, c.y, c.z);
+            NervHistory.Instance?.Record();
             app.Submit(new BuildMolecule(smiles, at));
         }
 

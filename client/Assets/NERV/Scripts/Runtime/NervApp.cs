@@ -48,6 +48,7 @@ namespace Nerv.Client
             gameObject.AddComponent<NervInteraction>();
             gameObject.AddComponent<NervEffects>();
             gameObject.AddComponent<NervDirector>();
+            gameObject.AddComponent<NervHistory>();
             gameObject.AddComponent<UI.PeriodicTablePanel>();
             gameObject.AddComponent<UI.MoleculeCardPanel>();
             gameObject.AddComponent<NervHud>();
@@ -95,6 +96,7 @@ namespace Nerv.Client
 
             Host = new SimulationHost(sim);
             SceneName = preset.Name;
+            NervHistory.Instance?.Clear();
             // Фоновый поток там, где он есть (на WebGL — ручной режим через Advance в Update).
             if (Application.platform != RuntimePlatform.WebGLPlayer) Host.Start();
         }
@@ -132,6 +134,7 @@ namespace Nerv.Client
 
         public void ClearAtoms()
         {
+            if (Snapshot.AtomCount > 0) NervHistory.Instance?.Record();
             for (int i = 0; i < Snapshot.AtomCount; i++) Submit(new RemoveAtom(Snapshot.Ids[i]));
         }
 

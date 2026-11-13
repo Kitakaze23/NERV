@@ -166,4 +166,39 @@ namespace Nerv.Core.Sim
         }
         internal override void Execute(Simulation sim) => sim.ExecBuildMolecule(this);
     }
+
+    /// <summary>
+    /// Слепок мира для отмены и повтора: атомы (элемент, заряд, координаты, скорости), связи и «режим пламени».
+    /// Неизменяем после создания; настройки среды (температура, вода) в него не входят — их меняют ручки.
+    /// </summary>
+    public sealed class WorldState
+    {
+        internal int[] Z;
+        internal int[] Charges;
+        internal Vec3[] Positions;
+        internal Vec3[] Velocities;
+        internal (int A, int B, int Order, double Progress, bool FromReaction)[] Bonds;
+        internal long FlameTicksLeft;
+        public int AtomCount => Z.Length;
+        public int BondCount => Bonds.Length;
+    }
+
+    /// <summary>
+    /// Сохранить слепок мира на момент исполнения (ход истории перед действием пользователя).
+    /// Слепок появляется в <see cref="State"/>, когда команда выполнена потоком симуляции.
+    /// </summary>
+    public sealed class Checkpoint : Command
+    {
+        private volatile WorldState _state;
+        public WorldState State { get => _state; internal set => _state = value; }
+        internal override void Execute(Simulation sim) => State = sim.CaptureState();
+    }
+
+    /// <summary>Вернуть мир к слепку: все атомы заменяются атомами слепка (с новыми id), захваты и зоны тепла снимаются.</summary>
+    public sealed class RestoreState : Command
+    {
+        public WorldState State { get; }
+        public RestoreState(WorldState state) => State = state ?? throw new ArgumentNullException(nameof(state));
+        internal override void Execute(Simulation sim) => sim.ExecRestoreState(this);
+    }
 }

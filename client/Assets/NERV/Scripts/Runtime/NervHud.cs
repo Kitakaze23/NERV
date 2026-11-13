@@ -117,6 +117,7 @@ namespace Nerv.Client
             Safe("StepCard", RefreshStepCard);
             Safe("Labels", () => RefreshLabels(app, snap));
             Safe("GrabHint", () => RefreshGrabHint(snap));
+            Safe("History", RefreshHistory);
             _error.text = app.DataError ?? "";
         }
 
@@ -157,6 +158,7 @@ namespace Nerv.Client
             BuildLeft(root);
             BuildRight(root, app);
             BuildJournal(root);
+            BuildHistory(root);
             BuildMiniTable(root);
             BuildStepCard(root);
             BuildDragAndHints(root);
@@ -369,6 +371,34 @@ namespace Nerv.Client
         {
             Button b = NervUI.Button(grid, text, NervUI.ButtonStyle.Ghost, () => _interaction.Tool = tool, 13);
             _tools[tool] = b;
+        }
+
+        private Button _undo, _redo;
+
+        /// <summary>Отмена и повтор — маленькая панель внизу по центру (Cmd/Ctrl+Z, Cmd/Ctrl+Shift+Z).</summary>
+        private void BuildHistory(Transform root)
+        {
+            Image panel = NervUI.Panel(root, "History", 14);
+            RectTransform pr = panel.rectTransform;
+            pr.anchorMin = pr.anchorMax = new Vector2(0.5f, 0);
+            pr.pivot = new Vector2(0.5f, 0);
+            pr.anchoredPosition = new Vector2(0, Margin);
+            pr.sizeDelta = new Vector2(268, 52);
+            HorizontalLayoutGroup row = NervUI.Row(panel.transform, 6, "Buttons");
+            NervUI.Stretch((RectTransform)row.transform, 6);
+            row.childForceExpandWidth = true;
+            _undo = NervUI.Button(row.transform, "↺  Отменить", NervUI.ButtonStyle.Ghost, () => NervHistory.Instance?.Undo(), 13);
+            NervUI.Size(_undo, -1, 40, 1);
+            _redo = NervUI.Button(row.transform, "Повторить  ↻", NervUI.ButtonStyle.Ghost, () => NervHistory.Instance?.Redo(), 13);
+            NervUI.Size(_redo, -1, 40, 1);
+        }
+
+        private void RefreshHistory()
+        {
+            NervHistory h = NervHistory.Instance;
+            bool u = h != null && h.CanUndo, r = h != null && h.CanRedo;
+            if (_undo.interactable != u) { _undo.interactable = u; LabelOf(_undo).color = u ? NervUI.TextSoft : NervUI.Dim; }
+            if (_redo.interactable != r) { _redo.interactable = r; LabelOf(_redo).color = r ? NervUI.TextSoft : NervUI.Dim; }
         }
 
         private void BuildJournal(Transform root)

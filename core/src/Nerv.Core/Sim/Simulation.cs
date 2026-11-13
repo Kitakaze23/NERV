@@ -395,6 +395,58 @@ namespace Nerv.Core.Sim
             }
         }
 
+        internal WorldState CaptureState()
+        {
+            World w = World;
+            int n = w.AtomCount;
+            var st = new WorldState
+            {
+                Z = new int[n],
+                Charges = new int[n],
+                Positions = new Vec3[n],
+                Velocities = new Vec3[n],
+                FlameTicksLeft = Math.Max(0, _lastExothermicTick + Settings.FlameHoldTicks - Tick),
+            };
+            for (int i = 0; i < n; i++)
+            {
+                st.Z[i] = w.Elements[i].Z;
+                st.Charges[i] = w.Charges[i];
+                st.Positions[i] = w.Positions[i];
+                st.Velocities[i] = w.Velocities[i];
+            }
+            var bonds = new List<(int, int, int, double, bool)>(w.Bonds.Count);
+            foreach (Bond b in w.Bonds)
+                bonds.Add((w.IndexOf(b.A), w.IndexOf(b.B), b.Order, b.Progress, b.FromReaction));
+            st.Bonds = bonds.ToArray();
+            return st;
+        }
+
+        internal void ExecRestoreState(RestoreState c)
+        {
+            WorldState st = c.State;
+            _grabs.Clear();
+            RebuildGrabList();
+            _zones.Clear();
+            // Удаляем через обычную команду — клиент получит события и уберёт свои виды.
+            for (int i = World.AtomCount - 1; i >= 0; i--)
+                ExecRemoveAtom(new RemoveAtom(World.IdAt(i)));
+
+            var ids = new AtomId[st.AtomCount];
+            for (int i = 0; i < ids.Length; i++)
+            {
+                ids[i] = ExecAddAtom(new AddAtom(st.Z[i], st.Positions[i], st.Charges[i]));
+                World.Velocities[World.IndexOf(ids[i])] = st.Velocities[i];
+            }
+            foreach (var b in st.Bonds)
+            {
+                Bond bond = World.AddBond(ids[b.A], ids[b.B], b.Order, b.Progress);
+                bond.FromReaction = b.FromReaction;
+                Emit(b.Progress >= 1.0 ? SimEventType.BondFormed : SimEventType.BondForming, ids[b.A], ids[b.B], bond.Id);
+            }
+            _lastExothermicTick = st.FlameTicksLeft > 0 ? Tick - Settings.FlameHoldTicks + st.FlameTicksLeft : long.MinValue / 2;
+            _forcesStale = true;
+        }
+
         internal void ExecBuildMolecule(BuildMolecule c)
         {
             MoleculeTemplate t;

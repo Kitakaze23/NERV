@@ -40,6 +40,7 @@ namespace Nerv.Client
         private Vector2 _pressPos;
         private float _pressTime;
         private AtomId _pressAtom = AtomId.None;
+        private Checkpoint _grabRecord;
         private float _lastThermalFx;
         /// <summary>Радиус зоны нагрева/холода, Å.</summary>
         public const float HeatRadius = 4f;
@@ -54,6 +55,7 @@ namespace Nerv.Client
             Camera cam = NervEnvironment.MainCamera;
             if (app == null || cam == null) return;
             Ray ray = cam.ScreenPointToRay(NervInput.PointerPosition);
+            NervHistory.Instance?.Record();
             app.Submit(new AddAtom(element, NervApp.ToSim(PlanePoint(cam, ray, app))));
             Element = element;
         }
@@ -118,18 +120,25 @@ namespace Nerv.Client
                             _pressTime = Time.unscaledTime;
                             Vector3 p = app.AtomWorld(hit);
                             _grabDepth = Vector3.Dot(p - cam.transform.position, cam.transform.forward);
+                            _grabRecord = NervHistory.Instance?.Record();
                             app.Submit(new Grab(_grabbed, NervApp.ToSim(p)));
                         }
                         break;
                     case NervTool.Place:
+                        NervHistory.Instance?.Record();
                         app.Submit(new AddAtom(Element, NervApp.ToSim(PlanePoint(cam, ray, app))));
                         break;
                     case NervTool.Spark:
+                        NervHistory.Instance?.Record();
                         app.Submit(new Spark(NervApp.ToSim(hit >= 0 ? app.AtomWorld(hit) : PlanePoint(cam, ray, app)), radius: 4, kelvin: 6000));
                         NervEffects.Instance?.SparkFlash(hit >= 0 ? app.AtomWorld(hit) : PlanePoint(cam, ray, app));
                         break;
                     case NervTool.Erase:
-                        if (hit >= 0) app.Submit(new RemoveAtom(app.Snapshot.Ids[hit]));
+                        if (hit >= 0)
+                        {
+                            NervHistory.Instance?.Record();
+                            app.Submit(new RemoveAtom(app.Snapshot.Ids[hit]));
+                        }
                         break;
                 }
             }
@@ -139,6 +148,7 @@ namespace Nerv.Client
             {
                 Vector3 at = hit >= 0 ? app.AtomWorld(hit) : PlanePoint(cam, ray, app);
                 bool heat = Tool == NervTool.Heat;
+                if (NervInput.LeftPressed) NervHistory.Instance?.Record(); // один шаг истории на всё нажатие
                 app.Submit(new LocalTemperature(NervApp.ToSim(at), HeatRadius, heat ? 1500 : 20, 200));
                 if (Time.unscaledTime - _lastThermalFx > 0.18f)
                 {
@@ -175,7 +185,12 @@ namespace Nerv.Client
             {
                 if (_pressAtom == _grabbed && (NervInput.PointerPosition - _pressPos).sqrMagnitude < 36f &&
                     Time.unscaledTime - _pressTime < 0.35f)
+                {
+                    // Это был щелчок, а не перетаскивание: открываем карточку, в истории шаг не нужен.
                     UI.MoleculeCardPanel.Instance?.Open(_grabbed);
+                    NervHistory.Instance?.Discard(_grabRecord);
+                }
+                _grabRecord = null;
                 _pressAtom = AtomId.None;
                 app.Submit(new Release());
                 _grabbed = AtomId.None;
