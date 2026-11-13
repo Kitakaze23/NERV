@@ -67,10 +67,8 @@ namespace Nerv.Client.UI
             if (app == null) return;
             if (_view == null) _view = app.GetComponent<MoleculeView>();
 
-            // Справа от карточки — правая панель HUD; ставим карточку левее неё.
-            float scale = NervUI.Canvas.scaleFactor;
-            float right = (Screen.width - NervHud.RightPanelLeftPx) / Mathf.Max(0.01f, scale) + 16f;
-            _root.anchoredPosition = new Vector2(-right, -16f);
+            // Справа — колонка среды и журнала; карточка встаёт левее, под верхней панелью.
+            _root.anchoredPosition = new Vector2(-NervHud.RightColumn, -(NervHud.TopBarBottom + 4f));
 
             WorldSnapshot snap = app.Snapshot;
             Molecule m = snap.Molecules.FirstOrDefault(x => x.Atoms.Contains(_atom));

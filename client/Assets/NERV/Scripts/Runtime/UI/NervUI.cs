@@ -100,7 +100,9 @@ namespace Nerv.Client.UI
             var scaler = go.AddComponent<CanvasScaler>();
             scaler.uiScaleMode = CanvasScaler.ScaleMode.ScaleWithScreenSize;
             scaler.referenceResolution = new Vector2(1440, 900);
-            scaler.matchWidthOrHeight = 0.5f;
+            // По высоте: при любом соотношении сторон по вертикали помещаются 900 единиц —
+            // правая колонка (среда + журнал) и левая (сцена + мини-таблица) не наезжают друг на друга.
+            scaler.matchWidthOrHeight = 1f;
             go.AddComponent<GraphicRaycaster>();
             Root = (RectTransform)go.transform;
 
@@ -273,6 +275,98 @@ namespace Nerv.Client.UI
             if (height >= 0) le.preferredHeight = height;
             if (flexibleWidth >= 0) le.flexibleWidth = flexibleWidth;
             return le;
+        }
+
+        /// <summary>Ползунок концепта: тонкая дорожка, заливка цвета энергии, белая ручка.</summary>
+        public static Slider Slider(Transform parent, float min, float max, System.Action<float> onChange, string name = "Slider")
+        {
+            RectTransform root = Rect(parent, name);
+            Size(root, -1, 22);
+
+            Image track = Box(root, "Track", new Color(1, 1, 1, 0.10f), 3, false);
+            RectTransform tr = track.rectTransform;
+            tr.anchorMin = new Vector2(0, 0.5f);
+            tr.anchorMax = new Vector2(1, 0.5f);
+            tr.sizeDelta = new Vector2(0, 6);
+
+            RectTransform fillArea = Rect(root, "Fill Area");
+            fillArea.anchorMin = new Vector2(0, 0.5f);
+            fillArea.anchorMax = new Vector2(1, 0.5f);
+            fillArea.sizeDelta = new Vector2(-16, 6);
+            Image fill = Box(fillArea, "Fill", WithAlpha(Energy, 0.75f), 3, false);
+            fill.rectTransform.sizeDelta = Vector2.zero;
+
+            RectTransform handleArea = Stretch(Rect(root, "Handle Area"));
+            handleArea.offsetMin = new Vector2(8, 0);
+            handleArea.offsetMax = new Vector2(-8, 0);
+            Image handle = Box(handleArea, "Handle", Color.white, 8);
+            handle.rectTransform.sizeDelta = new Vector2(16, 0);
+
+            Slider s = root.gameObject.AddComponent<Slider>();
+            s.fillRect = fill.rectTransform;
+            s.handleRect = handle.rectTransform;
+            s.targetGraphic = handle;
+            s.direction = UnityEngine.UI.Slider.Direction.LeftToRight;
+            s.minValue = min;
+            s.maxValue = max;
+            if (onChange != null) s.onValueChanged.AddListener(v => onChange(v));
+            return s;
+        }
+
+        /// <summary>Горизонтальная полоса-градиент (шкала температуры: холод → тепло).</summary>
+        public static RawImage Gradient(Transform parent, params Color[] stops)
+        {
+            const int w = 256;
+            var tex = new Texture2D(w, 1, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp };
+            for (int x = 0; x < w; x++)
+            {
+                float t = x / (w - 1f) * (stops.Length - 1);
+                int i = Mathf.Min(stops.Length - 2, Mathf.FloorToInt(t));
+                tex.SetPixel(x, 0, Color.Lerp(stops[i], stops[i + 1], t - i));
+            }
+            tex.Apply();
+            RectTransform r = Rect(parent, "Gradient");
+            RawImage img = r.gameObject.AddComponent<RawImage>();
+            img.texture = tex;
+            img.raycastTarget = false;
+            return img;
+        }
+
+        /// <summary>Строка «название — значение» (значение справа).</summary>
+        public static Text Property(Transform parent, string name, out Text value, int size = 13)
+        {
+            RectTransform row = Rect(parent, name);
+            Size(row, -1, size + 9);
+            Text n = Label(row, name, Regular, size, Muted, TextAnchor.MiddleLeft);
+            Stretch(n.rectTransform);
+            value = Label(row, "", Mono, size, Text, TextAnchor.MiddleRight);
+            Stretch(value.rectTransform);
+            return n;
+        }
+
+        public static Image Divider(Transform parent)
+        {
+            Image d = Box(parent, "Divider", new Color(1, 1, 1, 0.08f), 1, false);
+            Size(d, -1, 1);
+            return d;
+        }
+
+        /// <summary>Подпись раздела: капителью, шрифт Unbounded, приглушённая.</summary>
+        public static Text Section(Transform parent, string title)
+        {
+            Text t = Label(parent, title.ToUpperInvariant(), DisplayMedium, 11, Muted);
+            Size(t, -1, 16);
+            return t;
+        }
+
+        /// <summary>Переключатель-«пилюля»: заливка цвета энергии, когда включён.</summary>
+        public static void SetActive(Button b, bool active)
+        {
+            if (b == null) return;
+            Image img = b.GetComponent<Image>();
+            img.color = active ? Energy : new Color(1, 1, 1, 0.04f);
+            Text t = b.GetComponentInChildren<Text>();
+            if (t != null) t.color = active ? Ink : TextSoft;
         }
 
         public static Color WithAlpha(Color c, float a) => new Color(c.r, c.g, c.b, a);

@@ -23,7 +23,7 @@ namespace Nerv.Client
             Vector2 delta = p - _lastPointer;
             _lastPointer = p;
 
-            bool overUi = NervHud.PointerOverUi;
+            bool overUi = UI.NervUI.PointerOverUi;
             bool orbit = NervInput.RightHeld && !NervInput.ShiftHeld || (NervInput.AltHeld && NervInput.LeftHeld);
             bool pan = NervInput.MiddleHeld || (NervInput.RightHeld && NervInput.ShiftHeld);
 

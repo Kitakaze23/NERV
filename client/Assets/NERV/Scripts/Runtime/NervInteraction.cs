@@ -78,7 +78,7 @@ namespace Nerv.Client
             if (NervInput.SpacePressed) app.Paused = !app.Paused;
 
             Ray ray = cam.ScreenPointToRay(NervInput.PointerPosition);
-            bool overUi = NervHud.PointerOverUi || UI.NervUI.PointerOverUi;
+            bool overUi = UI.NervUI.PointerOverUi;
             int hit = overUi ? -1 : Pick(app, ray);
             _view.HoverIndex = (Tool == NervTool.Hand || Tool == NervTool.Erase) ? hit : -1;
 

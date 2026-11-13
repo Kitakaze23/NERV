@@ -1,342 +1,602 @@
 using System.Collections.Generic;
 using System.Linq;
+using Nerv.Client.UI;
 using Nerv.Core.Data;
 using Nerv.Core.Model;
 using Nerv.Core.Naming;
 using Nerv.Core.Sim;
 using UnityEngine;
+using UnityEngine.UI;
 
 namespace Nerv.Client
 {
     /// <summary>
-    /// Временный интерфейс на IMGUI: инструменты, элементы, сцены, среда, список веществ, журнал,
-    /// подписи над молекулами. Дальше его заменят 3D-панели в стиле концепта (они нужны и для VR).
+    /// Интерфейс песочницы по концепту (экран «Главный»), на наборе NervUI:
+    /// верхняя панель (режимы, сцена, замедление, качество, пауза), слева — сцена и вещества,
+    /// справа — среда, инструменты и счётчики, внизу справа — журнал, внизу слева — мини-таблица
+    /// Менделеева, сверху по центру — карточка шага реакции, над молекулами — подписи.
     /// </summary>
     public sealed class NervHud : MonoBehaviour
     {
-        /// <summary>Курсор над панелью интерфейса (камера и инструменты его игнорируют).</summary>
-        public static bool PointerOverUi { get; private set; }
-        /// <summary>Левый край правой панели в пикселях экрана (карточка вещества встаёт левее).</summary>
-        public static float RightPanelLeftPx { get; private set; } = 99999f;
+        private const float Margin = 24f, RightWidth = 240f, LeftWidth = 260f;
+        /// <summary>Отступ справа для карточки вещества: правая колонка + зазор.</summary>
+        public const float RightColumn = Margin + RightWidth + 16f;
+        public const float TopBarBottom = 96f;
 
         private NervInteraction _interaction;
-        private readonly List<Rect> _panels = new List<Rect>();
-        private sealed class LogEntry
+        private bool _built;
+
+        // Верхняя панель.
+        private Text _sceneButtonText;
+        private Button _slowButton, _qualityButton, _pauseButton;
+        private RectTransform _sceneMenu;
+
+        // Левая панель.
+        private Text _sceneTitle, _sceneHint, _flame;
+        private readonly List<Text> _substanceLines = new List<Text>();
+
+        // Правая панель.
+        private Slider _temperature, _speed;
+        private Text _temperatureValue, _temperatureNow, _speedValue, _atoms, _particles, _time;
+        private Button _vacuum, _water;
+        private readonly Dictionary<NervTool, Button> _tools = new Dictionary<NervTool, Button>();
+        private Button _tableTool;
+
+        // Журнал.
+        private sealed class JournalEntry
         {
-            public string Text;
-            public float Time;
-            public Color Color;
-            public int Count;
+            public string Main, Sub;
+            public Color SubColor;
+            public int Count = 1;
         }
 
-        private const float LogLife = 14f;
-        private readonly List<LogEntry> _log = new List<LogEntry>();
+        private const int JournalSize = 4;
+        private readonly List<JournalEntry> _journal = new List<JournalEntry>();
+        private readonly List<(Text main, Text sub)> _journalRows = new List<(Text, Text)>();
+        private bool _journalDirty;
+
+        // Мини-таблица.
+        private readonly Dictionary<string, Image> _miniBorders = new Dictionary<string, Image>();
+        private string _miniSelected;
+
+        // Карточка шага.
+        private CanvasGroup _stepGroup;
+        private RectTransform _stepRect;
+        private Text _stepKicker, _stepEquation, _stepEnergy, _stepText, _stepSummary;
+        private NervDirector.Card _stepShown;
+
+        // Подписи над молекулами.
+        private sealed class Tag
+        {
+            public RectTransform Rect;
+            public Image Box, Border;
+            public Text Text;
+            public CanvasGroup Group;
+        }
+
+        private RectTransform _labels;
+        private readonly List<Tag> _tags = new List<Tag>();
+        private readonly List<UnityEngine.Rect> _placed = new List<UnityEngine.Rect>();
         private readonly Dictionary<AtomId, int> _index = new Dictionary<AtomId, int>();
-        private GUIStyle _flameStyle, _cardTitle;
-        private GUIStyle _panel, _title, _label, _small, _button, _active, _tag, _logStyle;
-        private Texture2D _panelTex, _buttonTex, _activeTex, _tagTex;
-        private float _uiScale = 1f;
+        private readonly HashSet<AtomId> _grouped = new HashSet<AtomId>();
+
+        private Text _error;
 
         private void Start() => _interaction = GetComponent<NervInteraction>();
 
-        private void Update()
+        private void LateUpdate()
         {
             NervApp app = NervApp.Instance;
             if (app == null) return;
+            if (!_built) Build(app);
 
-            Vector2 p = NervInput.PointerPosition;
-            var gui = new Vector2(p.x, Screen.height - p.y) / _uiScale;
-            PointerOverUi = _panels.Any(r => r.Contains(gui));
-
-            foreach (SimEvent e in app.Events)
-                if (e.Type == SimEventType.MoleculeIdentified && e.Text != null && !e.Text.StartsWith("Атомарный"))
-                    Log("Опознано: " + e.Text, NervEnvironment.Energy);
-            RebuildSubstances(app.Snapshot);
-            foreach (ReactionRecord r in app.Reactions)
-                Log(NervDirector.Equation(r), r.Reaction.DeltaHKj < 0 ? NervEnvironment.Heat : NervEnvironment.Cold);
-        }
-
-        private readonly List<string> _substances = new List<string>();
-        private readonly HashSet<AtomId> _grouped = new HashSet<AtomId>();
-        private readonly List<Rect> _placedTags = new List<Rect>();
-
-        private void RebuildSubstances(WorldSnapshot snap)
-        {
-            _substances.Clear();
+            WorldSnapshot snap = app.Snapshot;
+            _index.Clear();
+            for (int i = 0; i < snap.AtomCount; i++) _index[snap.Ids[i]] = i;
             _grouped.Clear();
             foreach (IonicGroup g in snap.IonicGroups)
                 foreach (Molecule m in g.Members)
                     foreach (AtomId id in m.Atoms) _grouped.Add(id);
+
+            foreach (SimEvent e in app.Events)
+                if (e.Type == SimEventType.MoleculeIdentified && e.Text != null && !e.Text.StartsWith("Атомарный"))
+                    AddJournal(e.Text, "опознано", NervUI.Energy);
+            foreach (ReactionRecord r in app.Reactions)
+            {
+                string kind = StepTitle(r.Reaction.Name).ToLowerInvariant() + (r.Reaction.DeltaHKj < 0 ? " · экзо" : r.Reaction.DeltaHKj > 0 ? " · эндо" : "");
+                AddJournal(NervDirector.Equation(r), kind, r.Reaction.DeltaHKj < 0 ? NervUI.Heat : NervEnvironment.Cold);
+            }
+
+            RefreshTopBar(app);
+            RefreshLeft(app, snap);
+            RefreshRight(app, snap);
+            if (_journalDirty) RefreshJournal(snap);
+            RefreshMiniTable();
+            RefreshStepCard();
+            RefreshLabels(app, snap);
+            _error.text = app.DataError ?? "";
+        }
+
+        // ================= Построение =================
+
+        private void Build(NervApp app)
+        {
+            _built = true;
+            NervUI.Init();
+            Transform root = NervUI.Root;
+
+            // Подписи — самый нижний слой: непрозрачные панели закрывают их сами.
+            _labels = NervUI.Stretch(NervUI.Rect(root, "Labels"));
+
+            BuildTopBar(root, app);
+            BuildLeft(root);
+            BuildRight(root, app);
+            BuildJournal(root);
+            BuildMiniTable(root);
+            BuildStepCard(root);
+
+            _error = NervUI.Label(root, "", NervUI.SemiBold, 14, new Color32(0xFF, 0x8A, 0x8A, 0xFF), TextAnchor.UpperCenter, "Error");
+            RectTransform er = _error.rectTransform;
+            er.anchorMin = new Vector2(0.5f, 1);
+            er.anchorMax = new Vector2(0.5f, 1);
+            er.pivot = new Vector2(0.5f, 1);
+            er.sizeDelta = new Vector2(700, 40);
+            er.anchoredPosition = new Vector2(0, -TopBarBottom);
+
+            // Выпадающий список сцен — поверх остальных панелей.
+            _sceneMenu.SetAsLastSibling();
+        }
+
+        private void BuildTopBar(Transform root, NervApp app)
+        {
+            Image bar = NervUI.Panel(root, "Top Bar", 16);
+            RectTransform br = bar.rectTransform;
+            br.anchorMin = new Vector2(0, 1);
+            br.anchorMax = new Vector2(1, 1);
+            br.pivot = new Vector2(0.5f, 1);
+            br.offsetMin = new Vector2(Margin, -16 - 64);
+            br.offsetMax = new Vector2(-Margin, -16);
+
+            HorizontalLayoutGroup row = NervUI.Row(bar.transform, 8, "Content");
+            NervUI.Stretch((RectTransform)row.transform);
+            row.padding = new RectOffset(20, 10, 10, 10);
+            row.childAlignment = TextAnchor.MiddleLeft;
+
+            Image logo = NervUI.Soft(row.transform, "Logo", NervUI.Energy);
+            NervUI.Size(logo, 22, 22);
+            Text name = NervUI.Label(row.transform, "NERV", NervUI.Display, 18, Color.white, TextAnchor.MiddleLeft);
+            name.horizontalOverflow = HorizontalWrapMode.Overflow;
+            NervUI.Size(name, 84, 44);
+
+            Button sandbox = NervUI.Button(row.transform, "Песочница", NervUI.ButtonStyle.Chip, null, 14);
+            NervUI.Size(sandbox, 120, 44);
+            foreach (string mode in new[] { "Уроки", "Лаборатория" })
+            {
+                Button b = NervUI.Button(row.transform, mode + " · скоро", NervUI.ButtonStyle.Plain, null, 14);
+                b.interactable = false;
+                NervUI.Size(b, mode.Length > 6 ? 170 : 120, 44);
+            }
+
+            RectTransform spacer = NervUI.Rect(row.transform, "Spacer");
+            NervUI.Size(spacer, 10, 44, 1);
+
+            Button scene = NervUI.Button(row.transform, "", NervUI.ButtonStyle.Ghost, ToggleSceneMenu, 13);
+            NervUI.Size(scene, 250, 44);
+            _sceneButtonText = NervUI.Label(scene.transform, "", NervUI.SemiBold, 13, NervUI.TextSoft, TextAnchor.MiddleCenter);
+            NervUI.Stretch(_sceneButtonText.rectTransform, 4);
+
+            _slowButton = NervUI.Button(row.transform, "Замедлять реакции", NervUI.ButtonStyle.Ghost, () =>
+            {
+                if (NervDirector.Instance != null) NervDirector.Instance.SlowMotion = !NervDirector.Instance.SlowMotion;
+            }, 13);
+            NervUI.Size(_slowButton, 170, 44);
+            _qualityButton = NervUI.Button(row.transform, "", NervUI.ButtonStyle.Ghost, () =>
+                NervQuality.Current = NervQuality.High ? NervQuality.Level.Low : NervQuality.Level.High, 13);
+            NervUI.Size(_qualityButton, 180, 44);
+            _pauseButton = NervUI.Button(row.transform, "Пауза", NervUI.ButtonStyle.Ghost, () => app.Paused = !app.Paused, 13);
+            NervUI.Size(_pauseButton, 116, 44);
+            Button clear = NervUI.Button(row.transform, "Очистить", NervUI.ButtonStyle.Ghost, app.ClearAtoms, 13);
+            NervUI.Size(clear, 110, 44);
+
+            // Выпадающий список сцен под кнопкой сцены (позиция уточняется при открытии).
+            Image menu = NervUI.Panel(root, "Scene Menu", 14, NervUI.WithAlpha(NervUI.Energy, 0.3f));
+            _sceneMenu = menu.rectTransform;
+            _sceneMenu.anchorMin = _sceneMenu.anchorMax = new Vector2(1, 1);
+            _sceneMenu.pivot = new Vector2(1, 1);
+            NervUI.Column(menu.gameObject, 10, 4);
+            menu.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            _sceneMenu.sizeDelta = new Vector2(280, 0);
+            menu.transform.Find("Border").gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
+            foreach (NervScenes.Preset preset in NervScenes.All)
+            {
+                NervScenes.Preset p = preset;
+                Button b = NervUI.Button(menu.transform, p.Name, NervUI.ButtonStyle.Plain, () =>
+                {
+                    app.LoadScene(p);
+                    _sceneMenu.gameObject.SetActive(false);
+                }, 14, 8, p.Name);
+                NervUI.Size(b, -1, 38);
+                Text t = b.GetComponentInChildren<Text>();
+                t.alignment = TextAnchor.MiddleLeft;
+                t.rectTransform.offsetMin = new Vector2(12, 0);
+            }
+            _sceneMenu.gameObject.SetActive(false);
+            _sceneMenuAnchor = (RectTransform)scene.transform;
+        }
+
+        private RectTransform _sceneMenuAnchor;
+
+        private void ToggleSceneMenu()
+        {
+            bool open = !_sceneMenu.gameObject.activeSelf;
+            _sceneMenu.gameObject.SetActive(open);
+            if (!open) return;
+            // Под кнопкой сцены, правым краем к её правому краю.
+            UnityEngine.Rect r = NervUI.ScreenRect(_sceneMenuAnchor);
+            float scale = NervUI.Canvas.scaleFactor;
+            float rightFromEdge = (Screen.width - r.xMax) / scale;
+            _sceneMenu.anchoredPosition = new Vector2(-rightFromEdge, -(r.yMax / scale + 6f));
+        }
+
+        private void BuildLeft(Transform root)
+        {
+            Image panel = NervUI.Panel(root, "Scene Panel", 16);
+            RectTransform pr = panel.rectTransform;
+            NervUI.Place(pr, Margin, TopBarBottom + 4, LeftWidth, 100);
+            NervUI.Column(panel.gameObject, 18, 8);
+            panel.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            panel.transform.Find("Border").gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
+
+            NervUI.Section(panel.transform, "Сцена");
+            _sceneTitle = NervUI.Label(panel.transform, "", NervUI.DisplayMedium, 16, Color.white);
+            _sceneHint = NervUI.Label(panel.transform, "", NervUI.Regular, 12, NervUI.TextSoft);
+            _flame = NervUI.Label(panel.transform, "", NervUI.SemiBold, 13, NervUI.Heat);
+            NervUI.Divider(panel.transform);
+            NervUI.Section(panel.transform, "Вещества в сцене");
+            for (int i = 0; i < 10; i++)
+            {
+                Text t = NervUI.Label(panel.transform, "", NervUI.Regular, 13, NervUI.Text);
+                _substanceLines.Add(t);
+            }
+        }
+
+        private void BuildRight(Transform root, NervApp app)
+        {
+            Image panel = NervUI.Panel(root, "Environment Panel", 16);
+            RectTransform pr = panel.rectTransform;
+            pr.anchorMin = pr.anchorMax = new Vector2(1, 1);
+            pr.pivot = new Vector2(1, 1);
+            pr.anchoredPosition = new Vector2(-Margin, -(TopBarBottom + 4));
+            pr.sizeDelta = new Vector2(RightWidth, 100);
+            NervUI.Column(panel.gameObject, 18, 10);
+            panel.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            panel.transform.Find("Border").gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
+
+            NervUI.Section(panel.transform, "Среда");
+            NervUI.Property(panel.transform, "Температура", out _temperatureValue);
+            _temperature = NervUI.Slider(panel.transform, 0f, 3000f, v =>
+            {
+                if (Mathf.Abs(v - (float)app.Temperature) > 0.5f) app.SetTemperature(Mathf.Round(v));
+            });
+            RawImage grad = NervUI.Gradient(panel.transform,
+                new Color32(0x7F, 0xB8, 0xFF, 0xFF), new Color32(0xE8, 0xEC, 0xF4, 0xFF),
+                new Color32(0xFF, 0xB5, 0x47, 0xFF), new Color32(0xFF, 0x6B, 0x3D, 0xFF));
+            NervUI.Size(grad, -1, 4);
+            _temperatureNow = NervUI.Label(panel.transform, "", NervUI.Regular, 12, NervUI.Muted);
+
+            NervUI.Property(panel.transform, "Скорость времени", out _speedValue);
+            // Логарифмическая шкала ×0,05 … ×4: значение ползунка — log₂ масштаба.
+            _speed = NervUI.Slider(panel.transform, Mathf.Log(0.05f, 2f), 2f, v =>
+            {
+                float scale = Mathf.Pow(2f, v);
+                if (Mathf.Abs(scale - 1f) < 0.06f) scale = 1f;
+                if (Mathf.Abs(scale - (float)app.TimeScale) > 0.001f) app.SetTimeScale(scale);
+            });
+
+            HorizontalLayoutGroup medium = NervUI.Row(panel.transform, 4, "Medium");
+            medium.childForceExpandWidth = true;
+            _vacuum = NervUI.Button(medium.transform, "Вакуум", NervUI.ButtonStyle.Ghost, () => app.SetMedium(Medium.Vacuum), 13, 8);
+            NervUI.Size(_vacuum, -1, 36, 1);
+            _water = NervUI.Button(medium.transform, "Вода", NervUI.ButtonStyle.Ghost, () => app.SetMedium(Medium.Water), 13, 8);
+            NervUI.Size(_water, -1, 36, 1);
+
+            NervUI.Divider(panel.transform);
+            NervUI.Section(panel.transform, "Инструменты");
+            RectTransform grid = NervUI.Rect(panel.transform, "Tools");
+            NervUI.Size(grid, -1, 44 * 2 + 8);
+            GridLayoutGroup gl = grid.gameObject.AddComponent<GridLayoutGroup>();
+            gl.cellSize = new Vector2((RightWidth - 36 - 8) / 2f, 44);
+            gl.spacing = new Vector2(8, 8);
+            AddTool(grid, "Рука", NervTool.Hand);
+            AddTool(grid, "Искра", NervTool.Spark);
+            AddTool(grid, "Удалить", NervTool.Erase);
+            _tableTool = NervUI.Button(grid, "Таблица · T", NervUI.ButtonStyle.Ghost, () => PeriodicTablePanel.Instance?.Toggle(), 13);
+
+            NervUI.Divider(panel.transform);
+            NervUI.Property(panel.transform, "Атомов", out _atoms);
+            NervUI.Property(panel.transform, "Частиц", out _particles);
+            NervUI.Property(panel.transform, "Время", out _time);
+        }
+
+        private void AddTool(Transform grid, string text, NervTool tool)
+        {
+            Button b = NervUI.Button(grid, text, NervUI.ButtonStyle.Ghost, () => _interaction.Tool = tool, 13);
+            _tools[tool] = b;
+        }
+
+        private void BuildJournal(Transform root)
+        {
+            Image panel = NervUI.Panel(root, "Journal", 16);
+            RectTransform pr = panel.rectTransform;
+            pr.anchorMin = pr.anchorMax = new Vector2(1, 0);
+            pr.pivot = new Vector2(1, 0);
+            pr.anchoredPosition = new Vector2(-Margin, Margin);
+            pr.sizeDelta = new Vector2(RightWidth, 100);
+            NervUI.Column(panel.gameObject, 16, 3);
+            panel.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            panel.transform.Find("Border").gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
+            NervUI.Section(panel.transform, "Журнал");
+            for (int i = 0; i < JournalSize; i++)
+            {
+                Text main = NervUI.Label(panel.transform, "", NervUI.SemiBold, 13, Color.white);
+                Text sub = NervUI.Label(panel.transform, "", NervUI.Regular, 11, NervUI.Muted);
+                _journalRows.Add((main, sub));
+            }
+            _journalDirty = true;
+        }
+
+        private void BuildMiniTable(Transform root)
+        {
+            const float cell = 25f, gap = 3f;
+            float gridW = 18 * cell + 17 * gap, gridH = 7 * cell + 6 * gap;
+            Image panel = NervUI.Panel(root, "Mini Table", 16);
+            RectTransform pr = panel.rectTransform;
+            pr.anchorMin = pr.anchorMax = new Vector2(0, 0);
+            pr.pivot = new Vector2(0, 0);
+            pr.anchoredPosition = new Vector2(Margin, Margin);
+            pr.sizeDelta = new Vector2(gridW + 32, gridH + 32 + 26);
+
+            Text title = NervUI.Label(panel.transform, "ТАБЛИЦА МЕНДЕЛЕЕВА", NervUI.DisplayMedium, 11, NervUI.Muted, TextAnchor.MiddleLeft);
+            NervUI.Place(title.rectTransform, 16, 12, 260, 18);
+            Button open = NervUI.Button(panel.transform, "вся таблица · T", NervUI.ButtonStyle.Plain, () => PeriodicTablePanel.Instance?.Toggle(), 12, 6);
+            NervUI.Place((RectTransform)open.transform, gridW + 16 - 140, 8, 140, 24);
+            open.GetComponentInChildren<Text>().alignment = TextAnchor.MiddleRight;
+
+            RectTransform grid = NervUI.Place(NervUI.Rect(panel.transform, "Grid"), 16, 42, gridW, gridH);
+            foreach (Element e in ElementTable.All)
+            {
+                if (e.TableRow > 7) continue;
+                Color cpk = MoleculeView.ElementColor(e);
+                bool on = e.Availability == ElementAvailability.Enabled, opt = e.Availability == ElementAvailability.Optional;
+                Color bg = on ? NervUI.WithAlpha(cpk, 0.2f) : opt ? new Color(1, 1, 1, 0.05f) : new Color(1, 1, 1, 0.025f);
+                Image c = NervUI.Box(grid, e.Symbol, bg, 5);
+                NervUI.Place(c.rectTransform, (e.TableColumn - 1) * (cell + gap), (e.TableRow - 1) * (cell + gap), cell, cell);
+                Color border = on ? NervUI.WithAlpha(cpk, 0.8f) : opt ? NervUI.WithAlpha(cpk, 0.6f) : new Color(1, 1, 1, 0.05f);
+                _miniBorders[e.Symbol] = NervUI.Border(c.transform, border, 5);
+                Color fg = on ? Color.white : opt ? NervUI.TextSoft : new Color32(0x4C, 0x56, 0x6B, 0xFF);
+                NervUI.Stretch(NervUI.Label(c.transform, e.Symbol, NervUI.SemiBold, 10, fg, TextAnchor.MiddleCenter).rectTransform);
+                if (!e.IsAvailable) continue;
+                string sym = e.Symbol;
+                Button b = c.gameObject.AddComponent<Button>();
+                b.onClick.AddListener(() =>
+                {
+                    _interaction.Element = sym;
+                    _interaction.Tool = NervTool.Place;
+                });
+            }
+        }
+
+        private void BuildStepCard(Transform root)
+        {
+            Image card = NervUI.Panel(root, "Step Card", 18, NervUI.WithAlpha(NervUI.Heat, 0.35f));
+            card.raycastTarget = false;
+            _stepRect = card.rectTransform;
+            _stepRect.anchorMin = _stepRect.anchorMax = new Vector2(0.5f, 1);
+            _stepRect.pivot = new Vector2(0.5f, 1);
+            _stepRect.sizeDelta = new Vector2(460, 100);
+            _stepRect.anchoredPosition = new Vector2(0, -(TopBarBottom + 4));
+            NervUI.Column(card.gameObject, 18, 6);
+            card.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
+            card.transform.Find("Border").gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
+            _stepGroup = card.gameObject.AddComponent<CanvasGroup>();
+            _stepGroup.blocksRaycasts = false;
+            _stepKicker = NervUI.Label(card.transform, "", NervUI.DisplayMedium, 11, NervUI.Muted);
+            _stepEquation = NervUI.Label(card.transform, "", NervUI.SemiBold, 22, Color.white);
+            _stepEnergy = NervUI.Label(card.transform, "", NervUI.Regular, 13, NervUI.Heat);
+            _stepText = NervUI.Label(card.transform, "", NervUI.Regular, 13, NervUI.TextSoft);
+            _stepSummary = NervUI.Label(card.transform, "", NervUI.Regular, 12, NervUI.Muted);
+            card.gameObject.SetActive(false);
+        }
+
+        // ================= Обновление =================
+
+        private void RefreshTopBar(NervApp app)
+        {
+            _sceneButtonText.text = "Сцена: " + (string.IsNullOrEmpty(app.SceneName) ? "—" : app.SceneName) + "  ▾";
+            NervUI.SetActive(_slowButton, NervDirector.Instance != null && NervDirector.Instance.SlowMotion);
+            Text q = _qualityButton.GetComponentInChildren<Text>();
+            q.text = NervQuality.High ? "Качество: высокое" : "Качество: экономное";
+            _pauseButton.GetComponentInChildren<Text>().text = app.Paused ? "Продолжить" : "Пауза";
+            NervUI.SetActive(_pauseButton, app.Paused);
+        }
+
+        private void RefreshLeft(NervApp app, WorldSnapshot snap)
+        {
+            NervScenes.Preset current = NervScenes.All.FirstOrDefault(p => p.Name == app.SceneName);
+            _sceneTitle.text = current != null ? current.Name : "Своя сцена";
+            _sceneHint.text = current != null ? current.Hint : "";
+            _flame.text = snap.FlameActive ? "● Идёт горение" : "";
+            _flame.gameObject.SetActive(snap.FlameActive);
+
             var counts = new Dictionary<string, int>();
             foreach (Molecule m in snap.Molecules)
             {
-                if (m.Charge != 0 && _grouped.Contains(m.Atoms[0])) continue; // ион уже учтён в составе соли
-                string key = (m.Name ?? "неизвестное соединение") + "  " + FormulaText.Subscript(m.Formula) + FormulaText.ChargeSuperscript(m.Charge) + RadicalMark(m);
+                if (m.Charge != 0 && _grouped.Contains(m.Atoms[0])) continue; // ион учтён в составе соли
+                string key = "<color=#FFFFFF>" + NervDirector.Pretty(m.Formula, m.Charge) + "</color>  " + (m.Name ?? "неизвестное соединение");
+                if (m.IsRadical && m.Atoms.Count > 1) key = "<color=#FFB547>" + NervDirector.Pretty(m.Formula, m.Charge) + "</color>  " + (m.Name ?? "радикал");
                 counts.TryGetValue(key, out int c);
                 counts[key] = c + 1;
             }
             foreach (IonicGroup g in snap.IonicGroups)
             {
-                string key = (g.Name ?? "ионное соединение") + "  " + FormulaText.Subscript(g.Formula) + (g.Members.Count <= 2 ? "  (ионная пара)" : "  (кристалл)");
+                string key = "<color=#FFFFFF>" + FormulaText.Subscript(g.Formula) + "</color>  " + (g.Name ?? "ионное соединение") +
+                             (g.Members.Count <= 2 ? " · ионная пара" : " · кристалл");
                 counts.TryGetValue(key, out int c);
                 counts[key] = c + 1;
             }
-            foreach (KeyValuePair<string, int> kv in counts.OrderByDescending(k => k.Value).ThenBy(k => k.Key).Take(14))
-                _substances.Add((kv.Value > 1 ? kv.Value + " × " : "") + kv.Key);
+            List<KeyValuePair<string, int>> list = counts.OrderByDescending(k => k.Value).ThenBy(k => k.Key).ToList();
+            for (int i = 0; i < _substanceLines.Count; i++)
+            {
+                Text t = _substanceLines[i];
+                bool show = i < list.Count;
+                t.gameObject.SetActive(show || (i == 0));
+                if (!show)
+                {
+                    t.text = i == 0 ? "<color=#7D879B>Пусто — добавь атомы из таблицы</color>" : "";
+                    continue;
+                }
+                if (i == _substanceLines.Count - 1 && list.Count > _substanceLines.Count)
+                {
+                    t.text = "<color=#7D879B>… и ещё " + (list.Count - i) + "</color>";
+                    continue;
+                }
+                t.text = (list[i].Value > 1 ? list[i].Value + " × " : "") + list[i].Key;
+            }
         }
 
-        private void Log(string text, Color color)
+        private void RefreshRight(NervApp app, WorldSnapshot snap)
         {
-            // Повтор той же записи (одно и то же вещество опознано снова, цепная реакция) — счётчик ×N, а не новая строка.
-            LogEntry same = _log.Find(e => e.Text == text && Time.time - e.Time < LogLife);
+            _temperatureValue.text = app.Temperature.ToString("0") + " K";
+            _temperatureNow.text = "сейчас в сцене " + snap.Temperature.ToString("0") + " K";
+            _temperature.SetValueWithoutNotify((float)app.Temperature);
+            _speedValue.text = "×" + NervUI.Num(app.TimeScale, app.TimeScale < 1 ? "0.00" : "0.0");
+            _speed.SetValueWithoutNotify(Mathf.Log((float)app.TimeScale, 2f));
+            NervUI.SetActive(_vacuum, app.Medium == Medium.Vacuum);
+            NervUI.SetActive(_water, app.Medium == Medium.Water);
+            foreach (KeyValuePair<NervTool, Button> kv in _tools) NervUI.SetActive(kv.Value, _interaction.Tool == kv.Key);
+            NervUI.SetActive(_tableTool, PeriodicTablePanel.Instance != null && PeriodicTablePanel.Instance.IsOpen);
+            _atoms.text = snap.AtomCount.ToString();
+            _particles.text = (snap.Molecules.Count(m => !(m.Charge != 0 && _grouped.Contains(m.Atoms[0]))) + snap.IonicGroups.Count).ToString();
+            _time.text = NervUI.Num(snap.Tick * 0.5 / 1000.0, "0.0") + " пс";
+        }
+
+        private void AddJournal(string main, string sub, Color color)
+        {
+            // Повтор того же — счётчик ×N у последней такой записи, а не новая строка.
+            JournalEntry same = _journal.Find(j => j.Main == main);
             if (same != null)
             {
                 same.Count++;
-                same.Time = Time.time;
-                _log.Remove(same);
-                _log.Add(same);
-                return;
+                _journal.Remove(same);
+                _journal.Insert(0, same);
             }
-            _log.Add(new LogEntry { Text = text, Time = Time.time, Color = color, Count = 1 });
-            if (_log.Count > 6) _log.RemoveAt(0);
-        }
-
-        private void OnGUI()
-        {
-            NervApp app = NervApp.Instance;
-            if (app == null) return;
-            EnsureStyles();
-            _uiScale = Mathf.Clamp(Screen.dpi > 0 ? Screen.dpi / 110f : 1f, 1f, 2f);
-            GUI.matrix = Matrix4x4.Scale(new Vector3(_uiScale, _uiScale, 1f));
-            float w = Screen.width / _uiScale, h = Screen.height / _uiScale;
-
-            _panels.Clear();
-            RightPanelLeftPx = (w - 266f) * _uiScale;
-            // Под открытой таблицей Менделеева HUD не рисуем: IMGUI лёг бы поверх неё.
-            if (UI.PeriodicTablePanel.Instance != null && UI.PeriodicTablePanel.Instance.IsOpen) return;
-            DrawLabels(app);
-            DrawLeft(app, h);
-            DrawRight(app, w, h);
-            DrawLog(h);
-            DrawCard(w);
-
-            if (app.DataError != null)
-                GUI.Label(new Rect(240, 16, w - 520, 40), app.DataError, _label);
-        }
-
-        // ================= Левая панель: инструменты, элементы, сцены =================
-
-        private void DrawLeft(NervApp app, float h)
-        {
-            var r = new Rect(16, 16, 220, Mathf.Min(h - 32, 560));
-            _panels.Add(r);
-            GUILayout.BeginArea(r, _panel);
-            GUILayout.Label("NERV", _title);
-
-            GUILayout.Label("ИНСТРУМЕНТ", _small);
-            GUILayout.BeginHorizontal();
-            ToolButton("Рука", NervTool.Hand);
-            ToolButton("Искра", NervTool.Spark);
-            ToolButton("Удалить", NervTool.Erase);
-            GUILayout.EndHorizontal();
-
-            GUILayout.Space(8);
-            GUILayout.Label("ЭЛЕМЕНТЫ  (клавиши 1–8)", _small);
-            if (GUILayout.Button("Таблица Менделеева  (T)", _button, GUILayout.Height(28)))
-                UI.PeriodicTablePanel.Instance?.Toggle();
-            for (int row = 0; row < 2; row++)
+            else
             {
-                GUILayout.BeginHorizontal();
-                for (int col = 0; col < 4; col++)
+                _journal.Insert(0, new JournalEntry { Main = main, Sub = sub, SubColor = color });
+                if (_journal.Count > 20) _journal.RemoveAt(_journal.Count - 1);
+            }
+            _journalDirty = true;
+        }
+
+        private void RefreshJournal(WorldSnapshot snap)
+        {
+            _journalDirty = false;
+            for (int i = 0; i < _journalRows.Count; i++)
+            {
+                (Text main, Text sub) = _journalRows[i];
+                bool show = i < _journal.Count;
+                main.gameObject.SetActive(show || i == 0);
+                sub.gameObject.SetActive(show);
+                if (!show)
                 {
-                    string sym = NervInteraction.Palette[row * 4 + col];
-                    bool on = _interaction.Tool == NervTool.Place && _interaction.Element == sym;
-                    Color prev = GUI.contentColor;
-                    GUI.contentColor = MoleculeView.ElementColor(ElementTable.Get(sym));
-                    if (GUILayout.Button(sym, on ? _active : _button, GUILayout.Height(30)))
-                    {
-                        _interaction.Element = sym;
-                        _interaction.Tool = NervTool.Place;
-                    }
-                    GUI.contentColor = prev;
+                    if (i == 0) main.text = "<color=#7D879B>Здесь появятся реакции и опознанные вещества</color>";
+                    continue;
                 }
-                GUILayout.EndHorizontal();
+                JournalEntry e = _journal[i];
+                main.text = e.Main + (e.Count > 1 ? "  <color=#9AA4B8>×" + e.Count + "</color>" : "");
+                sub.text = e.Sub;
+                sub.color = Color.Lerp(e.SubColor, Color.white, 0.25f);
             }
-
-            GUILayout.Space(8);
-            GUILayout.Label("СЦЕНЫ", _small);
-            foreach (NervScenes.Preset preset in NervScenes.All)
-                if (GUILayout.Button(preset.Name, preset.Name == app.SceneName ? _active : _button))
-                    app.LoadScene(preset);
-
-            NervScenes.Preset current = NervScenes.All.FirstOrDefault(p => p.Name == app.SceneName);
-            if (current != null)
-            {
-                GUILayout.Space(6);
-                GUILayout.Label(current.Hint, _small);
-            }
-            GUILayout.FlexibleSpace();
-            GUILayout.Label("Щелчок по атому рукой — карточка вещества\nПКМ — вращать · колесо — приблизить\nShift+ПКМ — сдвиг · Пробел — пауза", _small);
-            GUILayout.EndArea();
         }
 
-        private void ToolButton(string text, NervTool tool)
+        private void RefreshMiniTable()
         {
-            if (GUILayout.Button(text, _interaction.Tool == tool ? _active : _button, GUILayout.Height(28)))
-                _interaction.Tool = tool;
+            string sel = _interaction.Tool == NervTool.Place ? _interaction.Element : null;
+            if (sel == _miniSelected) return;
+            if (_miniSelected != null && _miniBorders.TryGetValue(_miniSelected, out Image old))
+                old.color = NervUI.WithAlpha(MoleculeView.ElementColor(ElementTable.Get(_miniSelected)), 0.8f);
+            _miniSelected = sel;
+            if (sel != null && _miniBorders.TryGetValue(sel, out Image b)) b.color = NervUI.Energy;
         }
 
-        // ================= Правая панель: среда и вещества =================
-
-        private void DrawRight(NervApp app, float w, float h)
-        {
-            var r = new Rect(w - 266, 16, 250, Mathf.Min(h - 32, 620));
-            _panels.Add(r);
-            GUILayout.BeginArea(r, _panel);
-            WorldSnapshot snap = app.Snapshot;
-
-            GUILayout.Label("СРЕДА", _small);
-            GUILayout.Label("Температура: " + app.Temperature.ToString("0") + " K   (сейчас " + snap.Temperature.ToString("0") + " K)", _label);
-            float t = GUILayout.HorizontalSlider((float)app.Temperature, 0f, 3000f);
-            if (Mathf.Abs(t - (float)app.Temperature) > 0.5f) app.SetTemperature(Mathf.Round(t));
-
-            GUILayout.Label("Скорость времени: ×" + app.TimeScale.ToString(app.TimeScale < 1 ? "0.00" : "0.0"), _label);
-            // Логарифмическая шкала ×0,05 … ×4: середина ползунка — ×1.
-            float logNow = Mathf.Log((float)app.TimeScale, 2f);
-            float logNew = GUILayout.HorizontalSlider(logNow, Mathf.Log(0.05f, 2f), 2f);
-            if (Mathf.Abs(logNew - logNow) > 0.01f)
-            {
-                float scale = Mathf.Pow(2f, logNew);
-                if (Mathf.Abs(scale - 1f) < 0.06f) scale = 1f;
-                app.SetTimeScale(scale);
-            }
-
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button("Вакуум", app.Medium == Medium.Vacuum ? _active : _button)) app.SetMedium(Medium.Vacuum);
-            if (GUILayout.Button("Вода", app.Medium == Medium.Water ? _active : _button)) app.SetMedium(Medium.Water);
-            GUILayout.EndHorizontal();
-
-            GUILayout.BeginHorizontal();
-            if (GUILayout.Button(app.Paused ? "Продолжить" : "Пауза", _button)) app.Paused = !app.Paused;
-            if (GUILayout.Button("Очистить", _button)) app.ClearAtoms();
-            GUILayout.EndHorizontal();
-            if (NervDirector.Instance != null)
-            {
-                bool slow = NervDirector.Instance.SlowMotion;
-                if (GUILayout.Button((slow ? "✓ " : "   ") + "Замедлять новые реакции", slow ? _active : _button))
-                    NervDirector.Instance.SlowMotion = !slow;
-            }
-            if (GUILayout.Button(NervQuality.Label, _button))
-                NervQuality.Current = NervQuality.High ? NervQuality.Level.Low : NervQuality.Level.High;
-
-            GUILayout.Space(6);
-            GUILayout.Label("Атомов: " + snap.AtomCount + "   ·   " + (snap.Tick * 0.5 / 1000.0).ToString("0.0") + " пс", _small);
-            // Строка всегда занимает место (Layout и Repaint должны совпадать), меняется только текст.
-            _flameStyle.normal.textColor = NervEnvironment.Heat;
-            GUILayout.Label(snap.FlameActive ? "Идёт горение" : " ", _flameStyle);
-
-            GUILayout.Space(8);
-            GUILayout.Label("ВЕЩЕСТВА В СЦЕНЕ", _small);
-            // Список собирается в Update: имена молекул дописывает поток симуляции, и между событиями
-            // Layout и Repaint одного кадра он не должен меняться (иначе IMGUI ругается на «Invalid GUILayout state»).
-            foreach (string line in _substances) GUILayout.Label(line, _label);
-            GUILayout.EndArea();
-        }
-
-        // ================= Журнал =================
-
-        private void DrawLog(float h)
-        {
-            _log.RemoveAll(e => Time.time - e.Time > LogLife);
-            if (_log.Count == 0) return;
-            const float line = 22f;
-            float width = 0f;
-            foreach (LogEntry e in _log) width = Mathf.Max(width, _logStyle.CalcSize(new GUIContent(LogText(e))).x);
-            float y = h - 16 - _log.Count * line;
-            var r = new Rect(252, y - 8, width + 24, _log.Count * line + 16);
-            _panels.Add(r);
-            GUI.Box(r, GUIContent.none, _panel);
-            for (int i = 0; i < _log.Count; i++)
-            {
-                LogEntry e = _log[i];
-                Color c = e.Color;
-                c.a = Mathf.Clamp01((LogLife - (Time.time - e.Time)) / 4f);
-                _logStyle.normal.textColor = c;
-                GUI.Label(new Rect(264, y + i * line, width, line), LogText(e), _logStyle);
-            }
-        }
-
-        private static string LogText(LogEntry e) => e.Count > 1 ? e.Text + "   ×" + e.Count : e.Text;
-
-        // ================= Карточка шага реакции =================
-
-        private void DrawCard(float w)
+        private void RefreshStepCard()
         {
             NervDirector d = NervDirector.Instance;
             NervDirector.Card c = d != null ? d.Current : null;
-            if (c == null || d.CardAlpha <= 0.01f) return;
-
-            const float width = 440f;
-            var x = (w - width) / 2f;
-            // Если открыта карточка вещества, карточку шага ставим между левой панелью и ней.
-            UI.MoleculeCardPanel mc = UI.MoleculeCardPanel.Instance;
-            if (mc != null && mc.IsOpen && mc.Root != null)
+            bool show = c != null && d.CardAlpha > 0.01f && (PeriodicTablePanel.Instance == null || !PeriodicTablePanel.Instance.IsOpen);
+            _stepRect.gameObject.SetActive(show);
+            if (!show) return;
+            _stepGroup.alpha = d.CardAlpha;
+            if (c != _stepShown)
             {
-                float cardLeft = UI.NervUI.ScreenRect(mc.Root).xMin / _uiScale;
-                x = Mathf.Clamp((252f + cardLeft - width) / 2f, 252f, Mathf.Max(252f, cardLeft - width - 16f));
+                _stepShown = c;
+                _stepEquation.text = c.Equation;
+                _stepEnergy.text = c.Energy;
+                _stepEnergy.color = c.Accent;
+                _stepText.text = c.Text ?? "";
+                _stepText.gameObject.SetActive(!string.IsNullOrEmpty(c.Text));
+                _stepSummary.text = string.IsNullOrEmpty(c.Summary) ? "" : "Итог процесса: " + c.Summary + (c.Simplified ? "  ·  упрощённый механизм" : "");
+                _stepSummary.gameObject.SetActive(!string.IsNullOrEmpty(c.Summary));
             }
-            Color prev = GUI.color;
-            GUI.color = new Color(1, 1, 1, d.CardAlpha);
-            GUILayout.BeginArea(new Rect(x, 16, width, 320));
-            GUILayout.BeginVertical(_panel);
-            _cardTitle.normal.textColor = c.Accent;
-            GUILayout.Label((d.IsSlowed ? "▶ ЗАМЕДЛЕНИЕ · " : "") + "НОВЫЙ ШАГ · " + c.Title.ToUpperInvariant(), _small);
-            GUILayout.Label(c.Equation, _cardTitle);
-            GUILayout.Label(c.Energy, _label);
-            if (!string.IsNullOrEmpty(c.Text)) GUILayout.Label(c.Text, _label);
-            if (!string.IsNullOrEmpty(c.Summary))
-                GUILayout.Label("Итог процесса: " + c.Summary + (c.Simplified ? "   ·   упрощённый механизм" : ""), _small);
-            GUILayout.EndVertical();
-            GUILayout.EndArea();
-            GUI.color = prev;
+            _stepKicker.text = (d.IsSlowed ? "▶ ЗАМЕДЛЕНИЕ · " : "") + "НОВЫЙ ШАГ · " + c.Title.ToUpperInvariant();
+
+            // Между левой колонкой и правой (или открытой карточкой вещества).
+            float canvasW = NervUI.Root.rect.width;
+            float left = Margin + LeftWidth + 16f;
+            float right = canvasW - RightColumn;
+            if (MoleculeCardPanel.Instance != null && MoleculeCardPanel.Instance.IsOpen) right -= 440f + 16f;
+            float width = Mathf.Clamp(right - left, 320f, 460f);
+            _stepRect.sizeDelta = new Vector2(width, _stepRect.sizeDelta.y);
+            _stepRect.anchoredPosition = new Vector2((left + right) / 2f - canvasW / 2f, -(TopBarBottom + 4));
         }
 
         // ================= Подписи над молекулами =================
 
-        private void DrawLabels(NervApp app)
+        private void RefreshLabels(NervApp app, WorldSnapshot snap)
         {
-            WorldSnapshot snap = app.Snapshot;
             Camera cam = NervEnvironment.MainCamera;
-            _index.Clear();
-            for (int i = 0; i < snap.AtomCount; i++) _index[snap.Ids[i]] = i;
-
-            _placedTags.Clear();
-
-            // Сначала соли (они «главнее» своих ионов), потом молекулы.
-            foreach (IonicGroup g in snap.IonicGroups)
+            _placed.Clear();
+            int used = 0;
+            bool hide = PeriodicTablePanel.Instance != null && PeriodicTablePanel.Instance.IsOpen;
+            if (cam != null && !hide)
             {
-                var atoms = new List<AtomId>();
-                foreach (Molecule m in g.Members) atoms.AddRange(m.Atoms);
-                DrawTag(app, cam, atoms, (g.Name ?? "?") + "  " + FormulaText.Subscript(g.Formula), g.Name == null, 0.5f);
+                // Сначала соли (они «главнее» своих ионов), потом молекулы.
+                foreach (IonicGroup g in snap.IonicGroups)
+                {
+                    if (used >= 40) break;
+                    var atoms = new List<AtomId>();
+                    foreach (Molecule m in g.Members) atoms.AddRange(m.Atoms);
+                    if (PlaceTag(app, cam, used, atoms, FormulaText.Subscript(g.Formula), g.Name ?? "ионное соединение", g.Name == null, false, 0.5f))
+                        used++;
+                }
+                foreach (Molecule m in snap.Molecules)
+                {
+                    if (used >= 40) break;
+                    bool ion = m.Charge != 0;
+                    if (m.Atoms.Count < 2 && !ion) continue;
+                    if (ion && _grouped.Contains(m.Atoms[0])) continue;
+                    string name = m.Name ?? "?";
+                    if (m.IsRadical && m.Atoms.Count > 1 && (m.Name == null || !m.Name.Contains("радикал"))) name += " · радикал";
+                    if (PlaceTag(app, cam, used, m.Atoms, NervDirector.Pretty(m.Formula, m.Charge), name, m.Name == null, m.IsRadical, 0.35f))
+                        used++;
+                }
             }
-
-            int drawn = 0;
-            foreach (Molecule m in snap.Molecules)
-            {
-                if (drawn >= 40) break;
-                bool ion = m.Charge != 0;
-                if (m.Atoms.Count < 2 && !ion) continue;
-                if (ion && _grouped.Contains(m.Atoms[0])) continue; // ион уже подписан в составе соли
-                string text = (m.Name ?? "?") + "  " + FormulaText.Subscript(m.Formula) + FormulaText.ChargeSuperscript(m.Charge) + RadicalMark(m);
-                if (DrawTag(app, cam, m.Atoms, text, m.Name == null, 0.35f, m.IsRadical)) drawn++;
-            }
+            for (int i = used; i < _tags.Count; i++)
+                if (_tags[i].Rect.gameObject.activeSelf) _tags[i].Rect.gameObject.SetActive(false);
         }
 
-        /// <summary>Радикал — нестабильная частица: помечаем, если в названии этого ещё нет.</summary>
-        private static string RadicalMark(Molecule m) =>
-            m.IsRadical && m.Atoms.Count > 1 && (m.Name == null || !m.Name.Contains("радикал")) ? "  · радикал" : "";
-
-        private bool DrawTag(NervApp app, Camera cam, IReadOnlyList<AtomId> atoms, string text, bool unknown, float lift = 0.35f, bool radical = false)
+        private bool PlaceTag(NervApp app, Camera cam, int slot, IReadOnlyList<AtomId> atoms, string formula, string name,
+            bool unknown, bool radical, float lift)
         {
             Vector3 c = Vector3.zero;
             int n = 0;
@@ -359,67 +619,51 @@ namespace Nerv.Client
             }
             Vector3 sp = cam.WorldToScreenPoint(c + up * (top + lift * 0.1f * NervApp.MetersPerAngstrom));
             if (sp.z <= 0) return false;
-            Vector2 g = new Vector2(sp.x, Screen.height - sp.y) / _uiScale;
-            Vector2 size = _tag.CalcSize(new GUIContent(text));
-            Color prev = GUI.color;
-            if (unknown) GUI.color = new Color(1, 1, 1, 0.55f);
-            // Не даём подписи уйти за край экрана.
-            float x = Mathf.Clamp(g.x - size.x / 2, 4, Screen.width / _uiScale - size.x - 4);
-            float yTop = Mathf.Clamp(g.y - size.y - 4, 4, Screen.height / _uiScale - size.y - 4);
+
+            Tag tag = slot < _tags.Count ? _tags[slot] : CreateTag();
+            if (!tag.Rect.gameObject.activeSelf) tag.Rect.gameObject.SetActive(true);
+            string text = "<color=#FFFFFF>" + formula + "</color>  " + name;
+            if (tag.Text.text != text) tag.Text.text = text;
+            tag.Text.color = radical ? NervUI.Heat : new Color32(0xB7, 0xC0, 0xD1, 0xFF);
+            tag.Border.color = radical ? NervUI.WithAlpha(NervUI.Heat, 0.5f) : new Color(1, 1, 1, 0.10f);
+            tag.Group.alpha = unknown ? 0.6f : 1f;
+
+            float scale = NervUI.Canvas.scaleFactor;
+            var size = new Vector2(tag.Text.preferredWidth + 20f, 26f);
+            float canvasW = NervUI.Root.rect.width, canvasH = NervUI.Root.rect.height;
+            float x = Mathf.Clamp(sp.x / scale - size.x / 2f, 4f, canvasW - size.x - 4f);
+            float y = Mathf.Clamp(sp.y / scale + 4f, 4f, canvasH - size.y - 4f);
+            var rect = new UnityEngine.Rect(x, y, size.x, size.y);
             // Раздвигаем пересекающиеся подписи: сдвигаем вверх, пока не найдётся свободное место.
-            var rect = new Rect(x, yTop, size.x, size.y);
-            // IMGUI рисуется поверх нового интерфейса — подписи под открытыми панелями не показываем.
-            if (UI.NervUI.Covers(new Rect(rect.x * _uiScale, rect.y * _uiScale, rect.width * _uiScale, rect.height * _uiScale)))
-                return false;
-            for (int tries = 0; tries < 6 && _placedTags.Any(o => o.Overlaps(rect)); tries++)
-                rect.y -= size.y + 2;
-            _placedTags.Add(rect);
-            // Радикалы (нестабильные частицы) — янтарной подписью, как в концепте.
-            _tag.normal.textColor = radical ? NervEnvironment.Heat : Color.white;
-            GUI.Label(rect, text, _tag);
-            GUI.color = prev;
+            for (int tries = 0; tries < 6 && _placed.Any(o => o.Overlaps(rect)); tries++)
+                rect.y += size.y + 2f;
+            _placed.Add(rect);
+            tag.Rect.anchoredPosition = new Vector2(rect.x, rect.y);
+            tag.Rect.sizeDelta = size;
             return true;
         }
 
-        // ================= Стили =================
-
-        private void EnsureStyles()
+        private Tag CreateTag()
         {
-            if (_panel != null) return;
-            _panelTex = Tex(new Color(0.055f, 0.078f, 0.133f, 1f)); // непрозрачно: так текст читается на любом фоне
-            _buttonTex = Tex(new Color(1f, 1f, 1f, 0.06f));
-            _activeTex = Tex(new Color(0.36f, 0.88f, 0.9f, 0.28f));
-            _tagTex = Tex(new Color(0.055f, 0.078f, 0.133f, 0.92f));
-
-            _panel = new GUIStyle(GUI.skin.box) { padding = new RectOffset(14, 14, 12, 12) };
-            _panel.normal.background = _panelTex;
-            _title = new GUIStyle(GUI.skin.label) { fontSize = 20, fontStyle = FontStyle.Bold };
-            _title.normal.textColor = Color.white;
-            _label = new GUIStyle(GUI.skin.label) { fontSize = 13, wordWrap = true };
-            _label.normal.textColor = new Color(0.91f, 0.93f, 0.96f);
-            _small = new GUIStyle(GUI.skin.label) { fontSize = 11, wordWrap = true };
-            _small.normal.textColor = new Color(0.6f, 0.64f, 0.72f);
-            _button = new GUIStyle(GUI.skin.button) { fontSize = 13, fontStyle = FontStyle.Bold };
-            _button.normal.background = _buttonTex;
-            _button.hover.background = _activeTex;
-            _button.normal.textColor = _button.hover.textColor = new Color(0.85f, 0.88f, 0.93f);
-            _active = new GUIStyle(_button);
-            _active.normal.background = _activeTex;
-            _active.normal.textColor = Color.white;
-            _tag = new GUIStyle(GUI.skin.label) { fontSize = 12, padding = new RectOffset(6, 6, 2, 2), alignment = TextAnchor.MiddleCenter, wordWrap = false };
-            _tag.normal.background = _tagTex;
-            _tag.normal.textColor = Color.white;
-            _logStyle = new GUIStyle(GUI.skin.label) { fontSize = 13, wordWrap = false };
-            _flameStyle = new GUIStyle(GUI.skin.label) { fontSize = 13, fontStyle = FontStyle.Bold };
-            _cardTitle = new GUIStyle(GUI.skin.label) { fontSize = 20, fontStyle = FontStyle.Bold, wordWrap = true };
+            Image box = NervUI.Box(_labels, "Tag", NervUI.WithAlpha(NervUI.Glass, 0.88f), 8, false);
+            RectTransform r = box.rectTransform;
+            r.anchorMin = r.anchorMax = Vector2.zero;
+            r.pivot = Vector2.zero;
+            Image border = NervUI.Border(box.transform, new Color(1, 1, 1, 0.10f), 8);
+            Text t = NervUI.Label(box.transform, "", NervUI.Regular, 12, NervUI.TextSoft, TextAnchor.MiddleCenter);
+            t.horizontalOverflow = HorizontalWrapMode.Overflow;
+            NervUI.Stretch(t.rectTransform);
+            var tag = new Tag { Rect = r, Box = box, Border = border, Text = t, Group = box.gameObject.AddComponent<CanvasGroup>() };
+            tag.Group.blocksRaycasts = false;
+            _tags.Add(tag);
+            return tag;
         }
 
-        private static Texture2D Tex(Color c)
+        private static string StepTitle(string name)
         {
-            var t = new Texture2D(1, 1);
-            t.SetPixel(0, 0, c);
-            t.Apply();
-            return t;
+            if (string.IsNullOrEmpty(name)) return "реакция";
+            int dash = name.IndexOf(" — ", System.StringComparison.Ordinal);
+            return dash > 0 ? name.Substring(0, dash) : name;
         }
     }
 }
