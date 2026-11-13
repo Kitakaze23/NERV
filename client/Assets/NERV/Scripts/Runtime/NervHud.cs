@@ -107,15 +107,38 @@ namespace Nerv.Client
                 AddJournal(NervDirector.Equation(r), kind, r.Reaction.DeltaHKj < 0 ? NervUI.Heat : NervEnvironment.Cold);
             }
 
-            RefreshTopBar(app);
-            RefreshLeft(app, snap);
-            RefreshRight(app, snap);
-            if (_journalDirty) RefreshJournal(snap);
-            RefreshMiniTable();
-            RefreshStepCard();
-            RefreshLabels(app, snap);
-            RefreshGrabHint(snap);
+            // Каждый блок обновляется отдельно: ошибка в одном не должна гасить весь HUD.
+            Safe("TopBar", () => RefreshTopBar(app));
+            Safe("Left", () => RefreshLeft(app, snap));
+            Safe("Right", () => RefreshRight(app, snap));
+            if (_journalDirty) Safe("Journal", () => RefreshJournal(snap));
+            Safe("MiniTable", RefreshMiniTable);
+            Safe("StepCard", RefreshStepCard);
+            Safe("Labels", () => RefreshLabels(app, snap));
+            Safe("GrabHint", () => RefreshGrabHint(snap));
             _error.text = app.DataError ?? "";
+        }
+
+        private readonly HashSet<string> _reported = new HashSet<string>();
+
+        private void Safe(string block, System.Action a)
+        {
+            try { a(); }
+            catch (System.Exception ex)
+            {
+                // В лог — один раз на блок, иначе консоль забивается каждым кадром.
+                if (_reported.Add(block)) Debug.LogException(ex);
+            }
+        }
+
+        /// <summary>Подпись кнопки; если её нет (старая сборка UI) — создаём.</summary>
+        private static Text LabelOf(Button b)
+        {
+            Text t = b.GetComponentInChildren<Text>(true);
+            if (t != null) return t;
+            t = NervUI.Label(b.transform, "", NervUI.SemiBold, 13, NervUI.TextSoft, TextAnchor.MiddleCenter, "Label");
+            NervUI.Stretch(t.rectTransform, 4);
+            return t;
         }
 
         // ================= Построение =================
@@ -182,9 +205,9 @@ namespace Nerv.Client
             RectTransform spacer = NervUI.Rect(row.transform, "Spacer");
             NervUI.Size(spacer, 10, 44, 1);
 
-            Button scene = NervUI.Button(row.transform, "", NervUI.ButtonStyle.Ghost, ToggleSceneMenu, 13);
+            Button scene = NervUI.Button(row.transform, "Сцена", NervUI.ButtonStyle.Ghost, ToggleSceneMenu, 13);
             NervUI.Size(scene, 250, 44);
-            _sceneButtonText = scene.GetComponentInChildren<Text>();
+            _sceneButtonText = LabelOf(scene);
 
             _slowButton = NervUI.Button(row.transform, "Замедлять реакции", NervUI.ButtonStyle.Ghost, () =>
             {
@@ -513,9 +536,9 @@ namespace Nerv.Client
         {
             _sceneButtonText.text = "Сцена: " + (string.IsNullOrEmpty(app.SceneName) ? "—" : app.SceneName) + "  ▾";
             NervUI.SetActive(_slowButton, NervDirector.Instance != null && NervDirector.Instance.SlowMotion);
-            Text q = _qualityButton.GetComponentInChildren<Text>();
+            Text q = LabelOf(_qualityButton);
             q.text = NervQuality.High ? "Качество: высокое" : "Качество: экономное";
-            _pauseButton.GetComponentInChildren<Text>().text = app.Paused ? "Продолжить" : "Пауза";
+            LabelOf(_pauseButton).text = app.Paused ? "Продолжить" : "Пауза";
             NervUI.SetActive(_pauseButton, app.Paused);
         }
 

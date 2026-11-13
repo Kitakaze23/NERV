@@ -362,9 +362,21 @@ namespace Nerv.Client.UI
         {
             if (b == null) return;
             Image img = b.GetComponent<Image>();
+            // Активная кнопка: сплошная заливка «энергией», яркая рамка и жирная подпись —
+            // чтобы включённый режим читался с одного взгляда.
             img.color = active ? Energy : new Color(1, 1, 1, 0.04f);
+            Transform border = b.transform.Find("Border");
+            if (border != null)
+            {
+                Image bi = border.GetComponent<Image>();
+                if (bi != null) bi.color = active ? new Color(0.85f, 1f, 1f, 0.9f) : new Color(1, 1, 1, 0.12f);
+            }
             Text t = b.GetComponentInChildren<Text>();
-            if (t != null) t.color = active ? Ink : TextSoft;
+            if (t != null)
+            {
+                t.color = active ? Ink : TextSoft;
+                t.fontStyle = active ? FontStyle.Bold : FontStyle.Normal;
+            }
         }
 
         public static Color WithAlpha(Color c, float a) => new Color(c.r, c.g, c.b, a);
