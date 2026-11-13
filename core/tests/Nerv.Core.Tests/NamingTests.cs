@@ -32,7 +32,7 @@ namespace Nerv.Core.Tests
             Assert.Equal("Бензол", db.Find(Canonicalizer.KeyFromSmiles("C1=CC=CC=C1")).NameRu);
             Assert.Equal("Хлорид натрия", db.Find(Canonicalizer.KeyFromSmiles("[Cl-].[Na+]")).NameRu);
             Assert.Equal("C2H6O", db.Find(Canonicalizer.KeyFromSmiles("CCO")).Formula);
-            Assert.True(db.Find(Canonicalizer.KeyFromSmiles("CCCCCCCC")) == null, "октана в базе нет");
+            Assert.True(db.Find(Canonicalizer.KeyFromSmiles("CCCCCCCCCC")) == null, "декана в базе нет");
         }
 
         [Test]
