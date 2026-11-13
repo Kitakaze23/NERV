@@ -234,11 +234,9 @@ namespace Nerv.Client.UI
             cb.colorMultiplier = 1.4f;
             b.colors = cb;
             if (onClick != null) b.onClick.AddListener(() => onClick());
-            if (!string.IsNullOrEmpty(text))
-            {
-                Text t = Label(img.transform, text, SemiBold, fontSize, fg, TextAnchor.MiddleCenter, "Label");
-                Stretch(t.rectTransform, 4);
-            }
+            // Подпись создаётся всегда (даже пустая): текст кнопки потом можно менять.
+            Text t = Label(img.transform, text ?? "", SemiBold, fontSize, fg, TextAnchor.MiddleCenter, "Label");
+            Stretch(t.rectTransform, 4);
             return b;
         }
 

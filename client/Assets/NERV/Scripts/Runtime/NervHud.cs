@@ -182,15 +182,14 @@ namespace Nerv.Client
 
             Button scene = NervUI.Button(row.transform, "", NervUI.ButtonStyle.Ghost, ToggleSceneMenu, 13);
             NervUI.Size(scene, 250, 44);
-            _sceneButtonText = NervUI.Label(scene.transform, "", NervUI.SemiBold, 13, NervUI.TextSoft, TextAnchor.MiddleCenter);
-            NervUI.Stretch(_sceneButtonText.rectTransform, 4);
+            _sceneButtonText = scene.GetComponentInChildren<Text>();
 
             _slowButton = NervUI.Button(row.transform, "Замедлять реакции", NervUI.ButtonStyle.Ghost, () =>
             {
                 if (NervDirector.Instance != null) NervDirector.Instance.SlowMotion = !NervDirector.Instance.SlowMotion;
             }, 13);
             NervUI.Size(_slowButton, 170, 44);
-            _qualityButton = NervUI.Button(row.transform, "", NervUI.ButtonStyle.Ghost, () =>
+            _qualityButton = NervUI.Button(row.transform, "Качество", NervUI.ButtonStyle.Ghost, () =>
                 NervQuality.Current = NervQuality.High ? NervQuality.Level.Low : NervQuality.Level.High, 13);
             NervUI.Size(_qualityButton, 180, 44);
             _pauseButton = NervUI.Button(row.transform, "Пауза", NervUI.ButtonStyle.Ghost, () => app.Paused = !app.Paused, 13);
