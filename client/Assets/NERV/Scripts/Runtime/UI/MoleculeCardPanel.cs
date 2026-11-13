@@ -137,6 +137,13 @@ namespace Nerv.Client.UI
 
             Divider();
 
+            // Структурная формула: проекция настоящей 3D-молекулы на её главную плоскость.
+            if (m.Atoms.Count >= 2 && m.Atoms.Count <= 24)
+            {
+                Section("Структурная формула");
+                BuildStructure(app.Snapshot, m);
+            }
+
             // Свойства.
             Section("Свойства");
             double mass = 0;
@@ -190,6 +197,112 @@ namespace Nerv.Client.UI
             string footer = !string.IsNullOrEmpty(info?.WikidataId) ? "Источник: Wikidata " + info.WikidataId
                 : info != null ? "Источник: база NERV" : "Формула посчитана по атомам в сцене";
             NervUI.Label(_content, footer, NervUI.Regular, 12, NervUI.Dim);
+        }
+
+        private static readonly Dictionary<string, Color> StructColors = new Dictionary<string, Color>
+        {
+            { "H", new Color32(0xE8, 0xEC, 0xF4, 0xFF) }, { "C", new Color32(0xC9, 0xD1, 0xDE, 0xFF) },
+            { "N", new Color32(0x8F, 0xA5, 0xFF, 0xFF) }, { "O", new Color32(0xFF, 0x7A, 0x7A, 0xFF) },
+            { "F", new Color32(0xA8, 0xE0, 0x80, 0xFF) }, { "Na", new Color32(0xC4, 0x9B, 0xFF, 0xFF) },
+            { "S", new Color32(0xF2, 0xD3, 0x3A, 0xFF) }, { "Cl", new Color32(0x6E, 0xE0, 0x7F, 0xFF) },
+        };
+
+        private void BuildStructure(WorldSnapshot snap, Molecule m)
+        {
+            const float W = Width - 48f, H = 170f, pad = 22f;
+            RectTransform box = NervUI.Rect(_content, "Structure");
+            NervUI.Size(box, -1, H);
+
+            var atoms = new HashSet<AtomId>(m.Atoms);
+            var idx = new List<int>();
+            for (int i = 0; i < snap.AtomCount; i++) if (atoms.Contains(snap.Ids[i])) idx.Add(i);
+            if (idx.Count < 2) return;
+            var p = new Vector3[idx.Count];
+            Vector3 c = Vector3.zero;
+            for (int k = 0; k < idx.Count; k++)
+            {
+                int i = idx[k];
+                p[k] = new Vector3(snap.Positions[i * 3], snap.Positions[i * 3 + 1], snap.Positions[i * 3 + 2]);
+                c += p[k];
+            }
+            c /= p.Length;
+
+            // Главные оси (метод степеней для ковариации): на них молекула «раскрыта» сильнее всего.
+            float[,] cov = new float[3, 3];
+            foreach (Vector3 q0 in p)
+            {
+                Vector3 q = q0 - c;
+                for (int r = 0; r < 3; r++)
+                    for (int col = 0; col < 3; col++) cov[r, col] += q[r] * q[col];
+            }
+            Vector3 Mul(Vector3 v) => new Vector3(
+                cov[0, 0] * v.x + cov[0, 1] * v.y + cov[0, 2] * v.z,
+                cov[1, 0] * v.x + cov[1, 1] * v.y + cov[1, 2] * v.z,
+                cov[2, 0] * v.x + cov[2, 1] * v.y + cov[2, 2] * v.z);
+            Vector3 e1 = new Vector3(1f, 0.31f, 0.17f).normalized;
+            for (int it = 0; it < 40; it++) { Vector3 n = Mul(e1); if (n.sqrMagnitude < 1e-12f) break; e1 = n.normalized; }
+            Vector3 e2 = Vector3.Cross(e1, new Vector3(0.23f, 1f, 0.41f)).normalized;
+            for (int it = 0; it < 40; it++)
+            {
+                Vector3 n = Mul(e2);
+                n -= Vector3.Dot(n, e1) * e1;
+                if (n.sqrMagnitude < 1e-12f) break;
+                e2 = n.normalized;
+            }
+
+            var pts = new Vector2[p.Length];
+            float minX = float.MaxValue, maxX = float.MinValue, minY = float.MaxValue, maxY = float.MinValue;
+            for (int k = 0; k < p.Length; k++)
+            {
+                Vector3 q = p[k] - c;
+                pts[k] = new Vector2(Vector3.Dot(q, e1), Vector3.Dot(q, e2));
+                minX = Mathf.Min(minX, pts[k].x); maxX = Mathf.Max(maxX, pts[k].x);
+                minY = Mathf.Min(minY, pts[k].y); maxY = Mathf.Max(maxY, pts[k].y);
+            }
+            float sx = (W - 2 * pad) / Mathf.Max(0.01f, maxX - minX), sy = (H - 2 * pad) / Mathf.Max(0.01f, maxY - minY);
+            float scale = Mathf.Min(Mathf.Min(sx, sy), 70f); // не раздуваем маленькие молекулы
+            Vector2 mid = new Vector2((minX + maxX) / 2f, (minY + maxY) / 2f);
+            for (int k = 0; k < pts.Length; k++) pts[k] = (pts[k] - mid) * scale;
+
+            var local = new Dictionary<int, int>();
+            for (int k = 0; k < idx.Count; k++) local[idx[k]] = k;
+            Color line = new Color32(0x6B, 0x74, 0x88, 0xFF);
+            foreach (BondView b in snap.Bonds)
+            {
+                if (!local.TryGetValue(b.IndexA, out int ka) || !local.TryGetValue(b.IndexB, out int kb)) continue;
+                Vector2 a = pts[ka], d = pts[kb] - pts[ka];
+                float len = d.magnitude;
+                if (len < 1f) continue;
+                Vector2 dir = d / len, nrm = new Vector2(-dir.y, dir.x);
+                // Линия не заходит под подписи атомов.
+                const float gap = 11f;
+                if (len <= 2 * gap + 2) continue;
+                int order = Mathf.Clamp(b.Order, 1, 3);
+                for (int o = 0; o < order; o++)
+                {
+                    float off = (o - (order - 1) / 2f) * 5f;
+                    Image l = NervUI.Box(box, "Bond", line, 1, false);
+                    RectTransform lr = l.rectTransform;
+                    lr.anchorMin = lr.anchorMax = new Vector2(0.5f, 0.5f);
+                    lr.pivot = new Vector2(0.5f, 0.5f);
+                    lr.sizeDelta = new Vector2(len - 2 * gap, 1.8f);
+                    lr.anchoredPosition = a + d / 2f + nrm * off;
+                    lr.localRotation = Quaternion.Euler(0, 0, Mathf.Atan2(d.y, d.x) * Mathf.Rad2Deg);
+                }
+            }
+            for (int k = 0; k < idx.Count; k++)
+            {
+                string sym = ElementTable.Get(snap.AtomicNumbers[idx[k]]).Symbol;
+                int q = snap.Charges[idx[k]];
+                string label = sym + (q > 0 ? "⁺" : q < 0 ? "⁻" : "");
+                Text t = NervUI.Label(box, label, NervUI.Mono, 15, StructColors.TryGetValue(sym, out Color col) ? col : NervUI.Text, TextAnchor.MiddleCenter);
+                t.horizontalOverflow = HorizontalWrapMode.Overflow;
+                RectTransform tr = t.rectTransform;
+                tr.anchorMin = tr.anchorMax = new Vector2(0.5f, 0.5f);
+                tr.pivot = new Vector2(0.5f, 0.5f);
+                tr.sizeDelta = new Vector2(30, 20);
+                tr.anchoredPosition = pts[k];
+            }
         }
 
         private void Tag(Transform parent, string text, Color color)

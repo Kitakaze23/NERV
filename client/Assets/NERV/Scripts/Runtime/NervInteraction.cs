@@ -15,7 +15,11 @@ namespace Nerv.Client
         /// <summary>Искра: нагрев + радикалы.</summary>
         Spark,
         /// <summary>Удалить атом.</summary>
-        Erase
+        Erase,
+        /// <summary>Нагрев: пока кнопка зажата, атомы под курсором разогреваются.</summary>
+        Heat,
+        /// <summary>Холод: пока кнопка зажата, атомы под курсором остывают.</summary>
+        Cold
     }
 
     /// <summary>
@@ -36,6 +40,23 @@ namespace Nerv.Client
         private Vector2 _pressPos;
         private float _pressTime;
         private AtomId _pressAtom = AtomId.None;
+        private float _lastThermalFx;
+        /// <summary>Радиус зоны нагрева/холода, Å.</summary>
+        public const float HeatRadius = 4f;
+
+        /// <summary>Схваченный атом (для подсказки «Тяну углерод · 4 свободные связи»).</summary>
+        public AtomId Grabbed => _grabbed;
+
+        /// <summary>Поставить атом элемента под курсором (перетаскивание из таблицы).</summary>
+        public void PlaceAtPointer(string element)
+        {
+            NervApp app = NervApp.Instance;
+            Camera cam = NervEnvironment.MainCamera;
+            if (app == null || cam == null) return;
+            Ray ray = cam.ScreenPointToRay(NervInput.PointerPosition);
+            app.Submit(new AddAtom(element, NervApp.ToSim(PlanePoint(cam, ray, app))));
+            Element = element;
+        }
 
         public static readonly string[] Palette = { "H", "C", "N", "O", "Na", "Cl", "S", "F" };
 
@@ -109,6 +130,19 @@ namespace Nerv.Client
                     case NervTool.Erase:
                         if (hit >= 0) app.Submit(new RemoveAtom(app.Snapshot.Ids[hit]));
                         break;
+                }
+            }
+
+            // Нагрев и холод действуют, пока кнопка зажата: зона продлевается каждый кадр.
+            if ((Tool == NervTool.Heat || Tool == NervTool.Cold) && NervInput.LeftHeld && !overUi && !NervInput.AltHeld)
+            {
+                Vector3 at = hit >= 0 ? app.AtomWorld(hit) : PlanePoint(cam, ray, app);
+                bool heat = Tool == NervTool.Heat;
+                app.Submit(new LocalTemperature(NervApp.ToSim(at), HeatRadius, heat ? 1500 : 20, 200));
+                if (Time.unscaledTime - _lastThermalFx > 0.18f)
+                {
+                    _lastThermalFx = Time.unscaledTime;
+                    NervEffects.Instance?.ThermalPulse(at, heat);
                 }
             }
 

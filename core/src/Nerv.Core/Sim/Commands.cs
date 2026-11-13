@@ -127,4 +127,25 @@ namespace Nerv.Core.Sim
         }
         internal override void Execute(Simulation sim) => sim.ExecSpark(this);
     }
+
+    /// <summary>
+    /// Инструменты «Нагрев» и «Холод»: на время <see cref="DurationTicks"/> у атомов в сфере
+    /// температура подтягивается к <see cref="Kelvin"/> (свой термостат зоны, сильнее общего).
+    /// Клиент повторяет команду, пока держит кнопку, — зона продлевается.
+    /// </summary>
+    public sealed class LocalTemperature : Command
+    {
+        public Vec3 Center { get; }
+        public double Radius { get; }
+        public double Kelvin { get; }
+        public int DurationTicks { get; }
+        public LocalTemperature(Vec3 center, double radius, double kelvin, int durationTicks = 200)
+        {
+            Center = center;
+            Radius = radius;
+            Kelvin = kelvin;
+            DurationTicks = durationTicks;
+        }
+        internal override void Execute(Simulation sim) => sim.ExecLocalTemperature(this);
+    }
 }

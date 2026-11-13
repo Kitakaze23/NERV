@@ -228,5 +228,37 @@ namespace Nerv.Core.Tests
                 .Select(g => g.Key + "×" + g.Count());
             Console.WriteLine("      состав: " + string.Join(", ", hist));
         }
+
+        [Test]
+        public static void LocalTemperature_HeatsAndCools()
+        {
+            // Зона накрывает все молекулы H₂ (химически спокойные): температура сцены должна идти за зоной,
+            // хотя общий термостат тянет к 298 K.
+            Simulation sim = NewSim(temperature: 298, seed: 7);
+            sim.Settings.BoxHalfSize = 8;
+            for (int k = 0; k < 16; k++)
+            {
+                double x = (k % 4) * 3.0 - 4.5, y = (k / 4) * 3.0 - 4.5;
+                AtomId a = Add(sim, "H", x - 0.37, y, 0), b = Add(sim, "H", x + 0.37, y, 0);
+                sim.Apply(new AddBond(a, b, 1));
+            }
+            sim.Step(400);
+            for (int f = 0; f < 10; f++)
+            {
+                sim.Apply(new LocalTemperature(Vec3.Zero, 30, 1500, 200));
+                sim.Step(60);
+            }
+            double hot = sim.Temperature;
+            Assert.True(hot > 900, "нагрев поднимает температуру (" + hot.ToString("0") + " K)");
+            for (int f = 0; f < 20; f++)
+            {
+                sim.Apply(new LocalTemperature(Vec3.Zero, 30, 20, 200));
+                sim.Step(60);
+            }
+            double cold = sim.Temperature;
+            Assert.True(cold < 150, "холод остужает (" + cold.ToString("0") + " K)");
+            sim.Step(6000); // после нагрева ещё держится «режим пламени» (медленный термостат)
+            Assert.True(sim.Temperature > 200, "без инструмента сцена возвращается к температуре среды (" + sim.Temperature.ToString("0") + " K)");
+        }
     }
 }

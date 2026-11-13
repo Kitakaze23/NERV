@@ -114,6 +114,7 @@ namespace Nerv.Client
             RefreshMiniTable();
             RefreshStepCard();
             RefreshLabels(app, snap);
+            RefreshGrabHint(snap);
             _error.text = app.DataError ?? "";
         }
 
@@ -134,6 +135,7 @@ namespace Nerv.Client
             BuildJournal(root);
             BuildMiniTable(root);
             BuildStepCard(root);
+            BuildDragAndHints(root);
 
             _error = NervUI.Label(root, "", NervUI.SemiBold, 14, new Color32(0xFF, 0x8A, 0x8A, 0xFF), TextAnchor.UpperCenter, "Error");
             RectTransform er = _error.rectTransform;
@@ -164,9 +166,9 @@ namespace Nerv.Client
 
             Image logo = NervUI.Soft(row.transform, "Logo", NervUI.Energy);
             NervUI.Size(logo, 22, 22);
-            Text name = NervUI.Label(row.transform, "NERV", NervUI.Display, 18, Color.white, TextAnchor.MiddleLeft);
+            Text name = NervUI.Label(row.transform, "Mendal", NervUI.Display, 18, Color.white, TextAnchor.MiddleLeft);
             name.horizontalOverflow = HorizontalWrapMode.Overflow;
-            NervUI.Size(name, 84, 44);
+            NervUI.Size(name, 104, 44);
 
             Button sandbox = NervUI.Button(row.transform, "Песочница", NervUI.ButtonStyle.Chip, null, 14);
             NervUI.Size(sandbox, 120, 44);
@@ -302,12 +304,14 @@ namespace Nerv.Client
             NervUI.Divider(panel.transform);
             NervUI.Section(panel.transform, "Инструменты");
             RectTransform grid = NervUI.Rect(panel.transform, "Tools");
-            NervUI.Size(grid, -1, 44 * 2 + 8);
+            NervUI.Size(grid, -1, 44 * 3 + 16);
             GridLayoutGroup gl = grid.gameObject.AddComponent<GridLayoutGroup>();
             gl.cellSize = new Vector2((RightWidth - 36 - 8) / 2f, 44);
             gl.spacing = new Vector2(8, 8);
             AddTool(grid, "Рука", NervTool.Hand);
             AddTool(grid, "Искра", NervTool.Spark);
+            AddTool(grid, "Нагрев", NervTool.Heat);
+            AddTool(grid, "Холод", NervTool.Cold);
             AddTool(grid, "Удалить", NervTool.Erase);
             _tableTool = NervUI.Button(grid, "Таблица · T", NervUI.ButtonStyle.Ghost, () => PeriodicTablePanel.Instance?.Toggle(), 13);
 
@@ -356,9 +360,11 @@ namespace Nerv.Client
             pr.sizeDelta = new Vector2(gridW + 32, gridH + 32 + 26);
 
             Text title = NervUI.Label(panel.transform, "ТАБЛИЦА МЕНДЕЛЕЕВА", NervUI.DisplayMedium, 11, NervUI.Muted, TextAnchor.MiddleLeft);
-            NervUI.Place(title.rectTransform, 16, 12, 260, 18);
+            NervUI.Place(title.rectTransform, 16, 12, 200, 18);
+            Text hint = NervUI.Label(panel.transform, "перетащи элемент в сцену", NervUI.Regular, 11, NervUI.Dim, TextAnchor.MiddleLeft);
+            NervUI.Place(hint.rectTransform, 214, 12, 170, 18);
             Button open = NervUI.Button(panel.transform, "вся таблица · T", NervUI.ButtonStyle.Plain, () => PeriodicTablePanel.Instance?.Toggle(), 12, 6);
-            NervUI.Place((RectTransform)open.transform, gridW + 16 - 140, 8, 140, 24);
+            NervUI.Place((RectTransform)open.transform, gridW + 16 - 120, 8, 120, 24);
             open.GetComponentInChildren<Text>().alignment = TextAnchor.MiddleRight;
 
             RectTransform grid = NervUI.Place(NervUI.Rect(panel.transform, "Grid"), 16, 42, gridW, gridH);
@@ -382,7 +388,101 @@ namespace Nerv.Client
                     _interaction.Element = sym;
                     _interaction.Tool = NervTool.Place;
                 });
+                AddDrag(c.gameObject, e);
             }
+        }
+
+        // ================= Перетаскивание элемента из таблицы =================
+
+        private Image _ghost;
+        private Text _ghostText;
+        private RectTransform _grabHint;
+        private Text _grabHintText;
+
+        /// <summary>Клетку элемента можно перетащить в сцену — атом встанет под курсором.</summary>
+        private void AddDrag(GameObject cell, Element e)
+        {
+            var trig = cell.AddComponent<UnityEngine.EventSystems.EventTrigger>();
+            void On(UnityEngine.EventSystems.EventTriggerType type, System.Action<UnityEngine.EventSystems.PointerEventData> a)
+            {
+                var entry = new UnityEngine.EventSystems.EventTrigger.Entry { eventID = type };
+                entry.callback.AddListener(d => a((UnityEngine.EventSystems.PointerEventData)d));
+                trig.triggers.Add(entry);
+            }
+            On(UnityEngine.EventSystems.EventTriggerType.BeginDrag, d =>
+            {
+                _ghost.color = NervUI.WithAlpha(MoleculeView.ElementColor(e), 0.9f);
+                _ghostText.text = e.Symbol;
+                _ghost.gameObject.SetActive(true);
+                MoveGhost(d.position);
+            });
+            On(UnityEngine.EventSystems.EventTriggerType.Drag, d => MoveGhost(d.position));
+            On(UnityEngine.EventSystems.EventTriggerType.EndDrag, d =>
+            {
+                _ghost.gameObject.SetActive(false);
+                // Отпустили над сценой (не над панелью) — ставим атом.
+                bool overPanel = d.pointerCurrentRaycast.gameObject != null;
+                if (!overPanel) _interaction.PlaceAtPointer(e.Symbol);
+            });
+        }
+
+        private void MoveGhost(Vector2 screen)
+        {
+            float scale = NervUI.Canvas.scaleFactor;
+            _ghost.rectTransform.anchoredPosition = screen / scale;
+        }
+
+        private void BuildDragAndHints(Transform root)
+        {
+            _ghost = NervUI.Soft(root, "Drag Ghost", Color.white);
+            RectTransform gr = _ghost.rectTransform;
+            gr.anchorMin = gr.anchorMax = Vector2.zero;
+            gr.pivot = new Vector2(0.5f, 0.5f);
+            gr.sizeDelta = new Vector2(56, 56);
+            _ghostText = NervUI.Label(_ghost.transform, "", NervUI.SemiBold, 18, Color.white, TextAnchor.MiddleCenter);
+            NervUI.Stretch(_ghostText.rectTransform);
+            _ghost.gameObject.SetActive(false);
+
+            Image hint = NervUI.Box(root, "Grab Hint", NervUI.WithAlpha(NervUI.Glass, 0.92f), 8, false);
+            NervUI.Border(hint.transform, NervUI.WithAlpha(NervUI.Energy, 0.4f), 8);
+            _grabHint = hint.rectTransform;
+            _grabHint.anchorMin = _grabHint.anchorMax = Vector2.zero;
+            _grabHint.pivot = new Vector2(0, 1);
+            _grabHintText = NervUI.Label(hint.transform, "", NervUI.Regular, 13, new Color32(0x8E, 0xE9, 0xEC, 0xFF), TextAnchor.MiddleCenter);
+            _grabHintText.horizontalOverflow = HorizontalWrapMode.Overflow;
+            NervUI.Stretch(_grabHintText.rectTransform);
+            hint.gameObject.SetActive(false);
+        }
+
+        /// <summary>Подсказка у курсора при захвате: «Тяну углерод · 4 свободные связи».</summary>
+        private void RefreshGrabHint(WorldSnapshot snap)
+        {
+            AtomId id = _interaction.Grabbed;
+            bool show = !id.IsNone && _index.TryGetValue(id, out int i);
+            _grabHint.gameObject.SetActive(show);
+            if (!show) return;
+            _index.TryGetValue(id, out int idx);
+            Element e = ElementTable.Get(snap.AtomicNumbers[idx]);
+            int free = snap.FreeValences[idx];
+            string bonds = free <= 0 ? "все связи заняты"
+                : free + " " + Plural(free, "свободная связь", "свободные связи", "свободных связей");
+            string text = "Тяну " + Accusative(e.NameRu.ToLowerInvariant()) + " · " + bonds;
+            if (_grabHintText.text != text) _grabHintText.text = text;
+            _grabHint.sizeDelta = new Vector2(_grabHintText.preferredWidth + 24, 30);
+            float scale = NervUI.Canvas.scaleFactor;
+            _grabHint.anchoredPosition = NervInput.PointerPosition / scale + new Vector2(18, -18);
+        }
+
+        /// <summary>Винительный падеж названия элемента: «сера» → «серу», «углерод» → «углерод».</summary>
+        private static string Accusative(string name) =>
+            name.EndsWith("а") ? name.Substring(0, name.Length - 1) + "у" : name;
+
+        private static string Plural(int n, string one, string few, string many)
+        {
+            int m10 = n % 10, m100 = n % 100;
+            if (m10 == 1 && m100 != 11) return one;
+            if (m10 >= 2 && m10 <= 4 && (m100 < 12 || m100 > 14)) return few;
+            return many;
         }
 
         private void BuildStepCard(Transform root)

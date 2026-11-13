@@ -225,6 +225,16 @@ namespace Nerv.Client
             return new Trail { Line = lr };
         }
 
+        /// <summary>Мягкая волна под курсором инструментов «Нагрев» (тёплая) и «Холод» (голубая).</summary>
+        public void ThermalPulse(Vector3 at, bool heat)
+        {
+            if (_active.Count > 40) return;
+            float r = NervInteraction.HeatRadius * NervApp.MetersPerAngstrom;
+            Flash f = Spawn(at, heat ? NervEnvironment.Heat : NervEnvironment.Cold, r, 0.5f, 0f);
+            f.MinRadius = r * 0.4f;
+            f.HaloIntensity = 1.2f;
+        }
+
         public void SparkFlash(Vector3 at) => Spawn(at, NervEnvironment.Energy, 0.35f, 0.35f, 8f);
 
         private Flash Spawn(Vector3 at, Color color, float radius, float life, float intensity)

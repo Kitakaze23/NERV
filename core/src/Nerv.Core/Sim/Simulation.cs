@@ -161,6 +161,7 @@ namespace Nerv.Core.Sim
                 if (FlameActive && Thermostat.Temperature(w) < Settings.FlameMaxTemperature) tau = Settings.FlameThermostatTauFs;
                 Thermostat.Berendsen(w, Settings.TargetTemperature, dt, tau);
             }
+            ApplyThermalZones(dt);
 
             AdvanceBondProgress();
 
@@ -333,6 +334,65 @@ namespace Nerv.Core.Sim
         internal void ExecRelease(Release c)
         {
             if (_grabs.Remove(c.HandId)) RebuildGrabList();
+        }
+
+        private struct ThermalZone
+        {
+            public Vec3 Center;
+            public double Radius2, Kelvin;
+            public long Until;
+        }
+
+        private readonly List<ThermalZone> _zones = new List<ThermalZone>();
+        /// <summary>τ термостата зоны нагрева/охлаждения, фс: быстрее общего, чтобы инструмент «пересиливал» среду.</summary>
+        private const double ZoneTauFs = 40.0;
+
+        internal void ExecLocalTemperature(LocalTemperature c)
+        {
+            double r2 = c.Radius * c.Radius;
+            long until = Tick + Math.Max(1, c.DurationTicks);
+            // Зона в том же месте (клиент повторяет команду каждый кадр) — продлеваем её, а не плодим новые.
+            for (int i = 0; i < _zones.Count; i++)
+            {
+                ThermalZone z = _zones[i];
+                if ((z.Center - c.Center).LengthSquared < 0.25 && Math.Abs(z.Kelvin - c.Kelvin) < 1)
+                {
+                    z.Until = until;
+                    z.Radius2 = r2;
+                    _zones[i] = z;
+                    return;
+                }
+            }
+            _zones.Add(new ThermalZone { Center = c.Center, Radius2 = r2, Kelvin = Math.Max(1.0, c.Kelvin), Until = until });
+            if (_zones.Count > 16) _zones.RemoveAt(0);
+        }
+
+        private void ApplyThermalZones(double dt)
+        {
+            if (_zones.Count == 0) return;
+            _zones.RemoveAll(z => z.Until <= Tick);
+            World w = World;
+            foreach (ThermalZone z in _zones)
+            {
+                if (z.Kelvin > Settings.TargetTemperature) _lastExothermicTick = Tick; // нагрев держит «режим пламени»
+                for (int i = 0; i < w.AtomCount; i++)
+                {
+                    if ((w.Positions[i] - z.Center).LengthSquared > z.Radius2) continue;
+                    double m = w.Masses[i];
+                    double t = m * w.Velocities[i].LengthSquared / Units.AccelFactor / (3.0 * Units.Kb);
+                    if (t < 1.0)
+                    {
+                        // Неподвижный атом нагреть масштабированием нельзя — даём случайную тепловую скорость.
+                        if (z.Kelvin <= t) continue;
+                        double s = Math.Sqrt(Units.Kb * z.Kelvin * Units.AccelFactor / m) * 0.3;
+                        w.Velocities[i] = new Vec3(_rng.NextGaussian() * s, _rng.NextGaussian() * s, _rng.NextGaussian() * s);
+                        continue;
+                    }
+                    double lambda2 = 1.0 + dt / ZoneTauFs * (z.Kelvin / t - 1.0);
+                    double lambda = Math.Sqrt(Math.Min(4.0, Math.Max(0.25, lambda2)));
+                    w.Velocities[i] *= lambda;
+                }
+            }
         }
 
         internal void ExecSpark(Spark c)
