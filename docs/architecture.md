@@ -1,6 +1,6 @@
 # NERV — Архитектура (v0.8)
 
-*Статус: этапы 1 (ядро), 2 (реакции, распознавание, названия) и ускорение ядра реализованы. Обновлено: 2026-11-12.*
+*Статус: этапы 1 (ядро), 2 (реакции, распознавание, названия) и ускорение ядра реализованы. Обновлено: 2026-11-13.*
 *Репозиторий: https://github.com/Kitakaze23/NERV*
 *Визуальный концепт: https://claude.ai/artifact/DQ3kfXYNY3ykywu8xLBSeD*
 
@@ -123,7 +123,7 @@ Element
 ### 4.5 Команды и события
 
 **Команды** (через очередь `Enqueue` или немедленно `Apply`; все пишутся в журнал с номером тика):
-`AddAtom` · `RemoveAtom` · `AddBond` (заготовки) · `Grab(hand)` · `MoveGrab(hand)` · `Release(hand)` · `SetTemperature` · `SetMedium` · `SetTimeScale` · `Spark`
+`AddAtom` · `RemoveAtom` · `AddBond` (заготовки) · `Grab(hand)` · `MoveGrab(hand)` · `Release(hand)` · `SetTemperature` · `SetMedium` · `SetTimeScale` · `Spark` · `LocalTemperature` · `BuildMolecule`
 
 `HandId` в командах захвата — задел на несколько рук и игроков.
 
