@@ -50,7 +50,8 @@ namespace Nerv.Client
         /// <summary>Схваченный атом — для подсветки.</summary>
         public int GrabbedIndex = -1;
 
-        public static float VisualRadius(Element e) => 0.2f + 0.3f * (float)e.CovalentRadius; // Å
+        /// <summary>Радиус шара атома, Å — зависит от режима отображения (<see cref="NervView"/>).</summary>
+        public static float VisualRadius(Element e) => NervView.Radius(e);
 
         private void Awake()
         {
@@ -168,10 +169,12 @@ namespace Nerv.Client
 
         private Material ElementMaterial(int z)
         {
-            if (_elementMaterials.TryGetValue(z, out Material m)) return m;
+            int key = z * 4 + (int)NervView.Current;
+            if (_elementMaterials.TryGetValue(key, out Material m)) return m;
             Color c = ElementColor(ElementTable.Get(z));
-            m = MakeAtomMaterial(c);
-            _elementMaterials[z] = m;
+            // «Эффект» — стекло с неоновым ободком; «Шарики» и CPK — матовый пластик, как у учебной модели.
+            m = NervView.Effects ? MakeAtomMaterial(c) : MakeMaterial(c, c * 0.04f, 0.35f);
+            _elementMaterials[key] = m;
             return m;
         }
 
@@ -229,9 +232,9 @@ namespace Nerv.Client
                 _heatNext[snap.Ids[i]] = heat;
                 // Одиночный медленный атом в газе может «остыть» и при комнатной температуре, поэтому иней —
                 // только когда холодна и вся сцена.
-                if (heat < FrostBelow && snap.Temperature < 220)
+                if (NervView.Effects && heat < FrostBelow && snap.Temperature < 220)
                     _frost.Add(Matrix4x4.TRS(p, Quaternion.identity, Vector3.one * (2f * r * (1.35f + 0.4f * (1f - heat / FrostBelow)))));
-                for (int step = HeatSteps.Length - 1; step >= 0; step--)
+                for (int step = HeatSteps.Length - 1; step >= 0 && NervView.Effects; step--)
                 {
                     if (heat < HeatSteps[step]) continue;
                     _hot[step].Add(Matrix4x4.TRS(p, Quaternion.identity, Vector3.one * (2f * r * (2.0f + 0.3f * step))));
@@ -239,19 +242,20 @@ namespace Nerv.Client
                 }
 
                 int q = snap.Charges[i];
-                if (q != 0)
+                if (q != 0 && NervView.Annotations)
                 {
                     // Ореол растёт с величиной заряда: Ca²⁺ заметнее Na⁺.
                     float k = 2f * r * (1.6f + 0.2f * Mathf.Min(Mathf.Abs(q) - 1, 2));
                     (q > 0 ? _cations : _anions).Add(Matrix4x4.TRS(p, Quaternion.identity, Vector3.one * k));
                 }
-                if (snap.FreeValences[i] > 0) AddValenceDots(app, snap, i, p, r);
+                if (snap.FreeValences[i] > 0 && NervView.Annotations) AddValenceDots(app, snap, i, p, r);
             }
 
             // Связи.
             Vector3 camFwd = NervEnvironment.MainCamera.transform.forward;
             foreach (BondView b in snap.Bonds)
             {
+                if (!NervView.DrawBonds) break; // CPK: атомы перекрываются, связи не видны.
                 Vector3 a = app.AtomWorld(b.IndexA), c = app.AtomWorld(b.IndexB);
                 Vector3 d = c - a;
                 float len = d.magnitude;

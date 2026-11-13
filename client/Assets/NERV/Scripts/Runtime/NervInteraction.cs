@@ -89,6 +89,7 @@ namespace Nerv.Client
                 Tool = NervTool.Place;
             }
             if (NervInput.TablePressed) UI.PeriodicTablePanel.Instance?.Toggle();
+            if (NervInput.ViewPressed) NervView.Current = (NervView.Mode)(((int)NervView.Current + 1) % 3);
             if (NervInput.EscapePressed)
             {
                 // Esc сначала закрывает панели, потом сбрасывает инструмент.

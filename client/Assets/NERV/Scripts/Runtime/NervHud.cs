@@ -39,6 +39,7 @@ namespace Nerv.Client
         private Slider _temperature, _speed;
         private Text _temperatureValue, _temperatureNow, _speedValue, _atoms, _particles, _time;
         private Button _vacuum, _water;
+        private readonly Dictionary<NervView.Mode, Button> _views = new Dictionary<NervView.Mode, Button>();
         private readonly Dictionary<NervTool, Button> _tools = new Dictionary<NervTool, Button>();
         private Button _tableTool;
 
@@ -182,7 +183,7 @@ namespace Nerv.Client
             br.offsetMin = new Vector2(Margin, -16 - 64);
             br.offsetMax = new Vector2(-Margin, -16);
 
-            HorizontalLayoutGroup row = NervUI.Row(bar.transform, 8, "Content");
+            HorizontalLayoutGroup row = NervUI.Row(bar.transform, 6, "Content");
             NervUI.Stretch((RectTransform)row.transform);
             row.padding = new RectOffset(20, 10, 10, 10);
             row.childAlignment = TextAnchor.MiddleLeft;
@@ -191,36 +192,56 @@ namespace Nerv.Client
             NervUI.Size(logo, 22, 22);
             Text name = NervUI.Label(row.transform, "Mendal", NervUI.Display, 18, Color.white, TextAnchor.MiddleLeft);
             name.horizontalOverflow = HorizontalWrapMode.Overflow;
-            NervUI.Size(name, 104, 44);
+            NervUI.Size(name, 96, 44);
 
             Button sandbox = NervUI.Button(row.transform, "Песочница", NervUI.ButtonStyle.Chip, null, 14);
-            NervUI.Size(sandbox, 120, 44);
+            NervUI.Size(sandbox, 112, 44);
+            // Режимы, которых ещё нет: приглушены, «скоро» — мелкой второй строкой.
             foreach (string mode in new[] { "Уроки", "Лаборатория" })
             {
-                Button b = NervUI.Button(row.transform, mode + " · скоро", NervUI.ButtonStyle.Plain, null, 14);
+                Button b = NervUI.Button(row.transform, mode + "\n<size=10>скоро</size>", NervUI.ButtonStyle.Plain, null, 13);
                 b.interactable = false;
-                NervUI.Size(b, mode.Length > 6 ? 170 : 120, 44);
+                LabelOf(b).lineSpacing = 0.85f;
+                NervUI.Size(b, mode.Length > 6 ? 112 : 76, 44);
             }
 
             RectTransform spacer = NervUI.Rect(row.transform, "Spacer");
             NervUI.Size(spacer, 10, 44, 1);
 
-            Button scene = NervUI.Button(row.transform, "Сцена", NervUI.ButtonStyle.Ghost, ToggleSceneMenu, 13);
-            NervUI.Size(scene, 250, 44);
-            _sceneButtonText = LabelOf(scene);
+            // Вид молекул: сегментированный переключатель (V — следующий).
+            Image seg = NervUI.Box(row.transform, "View", new Color(1, 1, 1, 0.04f), 12);
+            NervUI.Border(seg.transform, new Color(1, 1, 1, 0.08f), 12);
+            NervUI.Size(seg, 214, 44);
+            HorizontalLayoutGroup segRow = NervUI.Row(seg.transform, 3, "Buttons");
+            NervUI.Stretch((RectTransform)segRow.transform, 3);
+            segRow.childForceExpandWidth = false;
+            _views.Clear();
+            foreach (NervView.Mode mode in new[] { NervView.Mode.Balls, NervView.Mode.Cpk, NervView.Mode.Effect })
+            {
+                NervView.Mode m = mode;
+                Button b = NervUI.Button(segRow.transform, NervView.Name(m), NervUI.ButtonStyle.Plain, () => NervView.Current = m, 13, 9);
+                NervUI.Size(b, m == NervView.Mode.Cpk ? 52 : 76, 38);
+                _views[m] = b;
+            }
 
-            _slowButton = NervUI.Button(row.transform, "Замедлять реакции", NervUI.ButtonStyle.Ghost, () =>
+            Button scene = NervUI.Button(row.transform, "Сцена", NervUI.ButtonStyle.Ghost, ToggleSceneMenu, 13);
+            NervUI.Size(scene, 180, 44);
+            _sceneButtonText = LabelOf(scene);
+            _sceneButtonText.horizontalOverflow = HorizontalWrapMode.Wrap;
+
+            _slowButton = NervUI.Button(row.transform, "Замедление", NervUI.ButtonStyle.Ghost, () =>
             {
                 if (NervDirector.Instance != null) NervDirector.Instance.SlowMotion = !NervDirector.Instance.SlowMotion;
             }, 13);
-            NervUI.Size(_slowButton, 170, 44);
-            _qualityButton = NervUI.Button(row.transform, "Качество", NervUI.ButtonStyle.Ghost, () =>
+            NervUI.Size(_slowButton, 112, 44);
+            // Экономный режим графики — переключатель: подсвечен, когда включён.
+            _qualityButton = NervUI.Button(row.transform, "Эко-режим", NervUI.ButtonStyle.Ghost, () =>
                 NervQuality.Current = NervQuality.High ? NervQuality.Level.Low : NervQuality.Level.High, 13);
-            NervUI.Size(_qualityButton, 180, 44);
+            NervUI.Size(_qualityButton, 104, 44);
             _pauseButton = NervUI.Button(row.transform, "Пауза", NervUI.ButtonStyle.Ghost, () => app.Paused = !app.Paused, 13);
-            NervUI.Size(_pauseButton, 116, 44);
+            NervUI.Size(_pauseButton, 104, 44);
             Button clear = NervUI.Button(row.transform, "Очистить", NervUI.ButtonStyle.Ghost, app.ClearAtoms, 13);
-            NervUI.Size(clear, 110, 44);
+            NervUI.Size(clear, 96, 44);
 
             // Выпадающий список сцен под кнопкой сцены (позиция уточняется при открытии).
             Image menu = NervUI.Panel(root, "Scene Menu", 14, NervUI.WithAlpha(NervUI.Energy, 0.3f));
@@ -534,12 +555,12 @@ namespace Nerv.Client
 
         private void RefreshTopBar(NervApp app)
         {
-            _sceneButtonText.text = "Сцена: " + (string.IsNullOrEmpty(app.SceneName) ? "—" : app.SceneName) + "  ▾";
+            _sceneButtonText.text = (string.IsNullOrEmpty(app.SceneName) ? "Сцена" : app.SceneName) + "  ▾";
             NervUI.SetActive(_slowButton, NervDirector.Instance != null && NervDirector.Instance.SlowMotion);
-            Text q = LabelOf(_qualityButton);
-            q.text = NervQuality.High ? "Качество: высокое" : "Качество: экономное";
+            NervUI.SetActive(_qualityButton, !NervQuality.High);
             LabelOf(_pauseButton).text = app.Paused ? "Продолжить" : "Пауза";
             NervUI.SetActive(_pauseButton, app.Paused);
+            foreach (KeyValuePair<NervView.Mode, Button> kv in _views) NervUI.SetActive(kv.Value, NervView.Current == kv.Key);
         }
 
         private void RefreshLeft(NervApp app, WorldSnapshot snap)

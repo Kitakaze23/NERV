@@ -161,6 +161,19 @@ namespace Nerv.Client
         }
 
         /// <summary>Клавиша T — таблица Менделеева.</summary>
+        /// <summary>Клавиша V — следующий режим отображения (Шарики → CPK → Эффект).</summary>
+        public static bool ViewPressed
+        {
+            get
+            {
+#if ENABLE_INPUT_SYSTEM
+                return Keyboard.current != null && Keyboard.current.vKey.wasPressedThisFrame;
+#else
+                return Input.GetKeyDown(KeyCode.V);
+#endif
+            }
+        }
+
         public static bool TablePressed
         {
             get
