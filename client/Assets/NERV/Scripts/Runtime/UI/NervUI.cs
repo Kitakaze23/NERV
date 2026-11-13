@@ -12,7 +12,8 @@ namespace Nerv.Client.UI
     public static class NervUI
     {
         // ---- Палитра концепта (раздел 7.5) ----
-        public static readonly Color Glass = new Color32(16, 22, 38, 235);
+        // Подложка непрозрачная: на полупрозрачной сквозь текст просвечивали яркие атомы и ореолы.
+        public static readonly Color Glass = new Color32(14, 20, 34, 255);
         public static readonly Color GlassLight = new Color32(255, 255, 255, 10);
         public static readonly Color Line = new Color32(255, 255, 255, 26);
         public static readonly Color Text = new Color32(0xE8, 0xEC, 0xF4, 0xFF);
@@ -30,6 +31,44 @@ namespace Nerv.Client.UI
         public static Font Mono { get; private set; }
 
         public static Canvas Canvas { get; private set; }
+
+        /// <summary>Открытые панели: старый IMGUI-HUD не рисует подписи поверх них.</summary>
+        private static readonly System.Collections.Generic.List<RectTransform> Occluders = new System.Collections.Generic.List<RectTransform>();
+        private static readonly Vector3[] Corners = new Vector3[4];
+
+        public static void RegisterOccluder(RectTransform r)
+        {
+            if (!Occluders.Contains(r)) Occluders.Add(r);
+        }
+
+        /// <summary>
+        /// Прямоугольник в пикселях экрана (начало — левый верхний угол, как у IMGUI)
+        /// пересекается с открытой панелью.
+        /// </summary>
+        public static bool Covers(UnityEngine.Rect screenTopLeft)
+        {
+            for (int i = Occluders.Count - 1; i >= 0; i--)
+            {
+                RectTransform r = Occluders[i];
+                if (r == null)
+                {
+                    Occluders.RemoveAt(i);
+                    continue;
+                }
+                if (!r.gameObject.activeInHierarchy) continue;
+                if (ScreenRect(r).Overlaps(screenTopLeft)) return true;
+            }
+            return false;
+        }
+
+        /// <summary>Экранный прямоугольник панели в координатах IMGUI (y вниз).</summary>
+        public static UnityEngine.Rect ScreenRect(RectTransform r)
+        {
+            r.GetWorldCorners(Corners); // для экранного холста мировые углы = пиксели, y вверх
+            float xMin = Corners[0].x, xMax = Corners[2].x;
+            float yMin = Screen.height - Corners[2].y, yMax = Screen.height - Corners[0].y;
+            return new UnityEngine.Rect(xMin, yMin, xMax - xMin, yMax - yMin);
+        }
         public static RectTransform Root { get; private set; }
 
         private static Sprite _rounded, _ring, _soft;

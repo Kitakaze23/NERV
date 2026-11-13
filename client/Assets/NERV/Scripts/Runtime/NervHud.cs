@@ -278,6 +278,13 @@ namespace Nerv.Client
 
             const float width = 440f;
             var x = (w - width) / 2f;
+            // Если открыта карточка вещества, карточку шага ставим между левой панелью и ней.
+            UI.MoleculeCardPanel mc = UI.MoleculeCardPanel.Instance;
+            if (mc != null && mc.IsOpen && mc.Root != null)
+            {
+                float cardLeft = UI.NervUI.ScreenRect(mc.Root).xMin / _uiScale;
+                x = Mathf.Clamp((252f + cardLeft - width) / 2f, 252f, Mathf.Max(252f, cardLeft - width - 16f));
+            }
             Color prev = GUI.color;
             GUI.color = new Color(1, 1, 1, d.CardAlpha);
             GUILayout.BeginArea(new Rect(x, 16, width, 320));
@@ -361,6 +368,9 @@ namespace Nerv.Client
             float yTop = Mathf.Clamp(g.y - size.y - 4, 4, Screen.height / _uiScale - size.y - 4);
             // Раздвигаем пересекающиеся подписи: сдвигаем вверх, пока не найдётся свободное место.
             var rect = new Rect(x, yTop, size.x, size.y);
+            // IMGUI рисуется поверх нового интерфейса — подписи под открытыми панелями не показываем.
+            if (UI.NervUI.Covers(new Rect(rect.x * _uiScale, rect.y * _uiScale, rect.width * _uiScale, rect.height * _uiScale)))
+                return false;
             for (int tries = 0; tries < 6 && _placedTags.Any(o => o.Overlaps(rect)); tries++)
                 rect.y -= size.y + 2;
             _placedTags.Add(rect);
@@ -376,10 +386,10 @@ namespace Nerv.Client
         private void EnsureStyles()
         {
             if (_panel != null) return;
-            _panelTex = Tex(new Color(0.063f, 0.086f, 0.15f, 0.82f));
+            _panelTex = Tex(new Color(0.055f, 0.078f, 0.133f, 1f)); // непрозрачно: так текст читается на любом фоне
             _buttonTex = Tex(new Color(1f, 1f, 1f, 0.06f));
             _activeTex = Tex(new Color(0.36f, 0.88f, 0.9f, 0.28f));
-            _tagTex = Tex(new Color(0.063f, 0.086f, 0.15f, 0.7f));
+            _tagTex = Tex(new Color(0.055f, 0.078f, 0.133f, 0.92f));
 
             _panel = new GUIStyle(GUI.skin.box) { padding = new RectOffset(14, 14, 12, 12) };
             _panel.normal.background = _panelTex;

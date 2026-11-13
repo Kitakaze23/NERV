@@ -19,6 +19,7 @@ namespace Nerv.Client.UI
     {
         public static MoleculeCardPanel Instance { get; private set; }
         public bool IsOpen => _root != null && _root.gameObject.activeSelf;
+        public RectTransform Root => _root;
 
         private const float Width = 440f;
 
@@ -56,6 +57,7 @@ namespace Nerv.Client.UI
             var fit = panel.gameObject.AddComponent<ContentSizeFitter>();
             fit.verticalFit = ContentSizeFitter.FitMode.PreferredSize;
             _content = _root;
+            NervUI.RegisterOccluder(_root);
         }
 
         private void LateUpdate()
@@ -121,7 +123,7 @@ namespace Nerv.Client.UI
 
             // Название и формула.
             string title = m.Name ?? FormulaText.Subscript(m.Formula) + FormulaText.ChargeSuperscript(m.Charge);
-            Text name = NervUI.Label(_content, title, NervUI.Display, title.Length > 18 ? 26 : 34, Color.white);
+            Text name = NervUI.Label(_content, title, NervUI.Display, title.Length > 22 ? 22 : title.Length > 14 ? 26 : 34, Color.white);
             NervUI.Size(name, -1, -1);
             if (info != null && info.TrivialRu.Count > 0)
                 NervUI.Label(_content, string.Join(" · ", info.TrivialRu), NervUI.Regular, 14, new Color32(0xB7, 0xC0, 0xD1, 0xFF));
@@ -187,7 +189,7 @@ namespace Nerv.Client.UI
                     NervUI.Label(box.transform, iso.NameRu, NervUI.SemiBold, 15, Color.white);
             }
 
-            string footer = info?.WikidataId != null ? "Источник: Wikidata " + info.WikidataId
+            string footer = !string.IsNullOrEmpty(info?.WikidataId) ? "Источник: Wikidata " + info.WikidataId
                 : info != null ? "Источник: база NERV" : "Формула посчитана по атомам в сцене";
             NervUI.Label(_content, footer, NervUI.Regular, 12, NervUI.Dim);
         }
