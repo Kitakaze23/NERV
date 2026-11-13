@@ -175,6 +175,7 @@ namespace Nerv.Core.Sim
                 _identifier.IdentifyMolecules(this);
                 Profile.IdentifyMs += SimulationProfile.Ms(ti);
             }
+            if (Tick % DecayCheckInterval == 0) CheckDecay(dt * DecayCheckInterval);
             if (topologyChanged || Tick % Math.Max(1, IonicGroupInterval) == 0)
             {
                 long tg = SimulationProfile.Now();
@@ -567,24 +568,89 @@ namespace Nerv.Core.Sim
                 Bond b = pool[pick];
                 pool.RemoveAt(pick);
                 left--;
-                int i = b.Ia, j = b.Ib;
-
                 // Двухатомную молекулу (O₂, Cl₂) искра разбивает на атомы целиком — как в разряде;
                 // в многоатомных кратная связь лишь понижает порядок, чтобы не крошить молекулу.
-                bool diatomic = w.AdjacentBonds[i].Count == 1 && w.AdjacentBonds[j].Count == 1;
-                if (b.Order > 1 && !diatomic) w.SetBondOrder(b, b.Order - 1);
-                else w.RemoveBond(b);
-                Emit(SimEventType.BondBroken, b.A, b.B, b.Id);
-                _rules.ForbidRebond(b.A, b.B, Tick + SparkRebondCooldownTicks);
-
-                // Осколки разлетаются с равными и противоположными импульсами.
-                Vec3 axis = (w.Positions[j] - w.Positions[i]).Normalized();
-                double mi = w.Masses[i], mj = w.Masses[j];
-                double mu = mi * mj / (mi + mj);
-                double p = Math.Sqrt(2.0 * SparkFragmentEnergyKcal * Units.AccelFactor * mu);
-                w.Velocities[i] -= axis * (p / mi);
-                w.Velocities[j] += axis * (p / mj);
+                SplitBond(b, SparkFragmentEnergyKcal, wholeDiatomic: true);
             }
+        }
+
+        private const int DecayCheckInterval = 4;
+        private const double DecayTempSmoothing = 0.01;
+        private readonly Dictionary<AtomId, double> _decayTemp = new Dictionary<AtomId, double>();
+        /// <summary>Энергия разлёта осколков при самопроизвольном распаде, ккал/моль (меньше, чем у искры).</summary>
+        private const double DecayFragmentEnergyKcal = 12.0;
+
+        /// <summary>
+        /// Самопроизвольный распад неустойчивых частиц: вероятность за интервал 1 − exp(−Δt/τ),
+        /// τ(T) = τ₃₀₀ · exp(Ea/R · (1/T − 1/300)), Ea = доля энергии слабой связи. Горячее — быстрее, на холоде почти вечны.
+        /// Рвётся самая слабая связь; осколкам какое-то время нельзя соединиться снова.
+        /// </summary>
+        private void CheckDecay(double dtFs)
+        {
+            World w = World;
+            List<Molecule> unstable = null;
+            foreach (Molecule m in w.Molecules)
+                if (m.Unstable) (unstable ??= new List<Molecule>()).Add(m);
+            if (unstable == null)
+            {
+                _decayTemp.Clear();
+                return;
+            }
+            var temps = new Dictionary<AtomId, double>();
+
+            foreach (Molecule m in unstable)
+            {
+                double ke = 0;
+                foreach (AtomId id in m.Atoms)
+                {
+                    int i = w.IndexOf(id);
+                    ke += w.Masses[i] * w.Velocities[i].LengthSquared;
+                }
+                double tNow = ke / Units.AccelFactor / (3.0 * Units.Kb * m.Atoms.Count);
+                // Мгновенная температура нескольких атомов скачет вдвое — сглаживаем (~0,2 пс), иначе распад «от флуктуации».
+                AtomId key = m.Atoms[0];
+                double t = _decayTemp.TryGetValue(key, out double prev) ? prev + DecayTempSmoothing * (tNow - prev) : tNow;
+                temps[key] = t;
+                t = Math.Max(20.0, t);
+                double ea = Settings.UnstableBarrierFraction * m.DecayBondEnergy;
+                double tau = Settings.UnstableLifetimePs * 1000.0 * Math.Exp(ea / Units.Kb * (1.0 / t - 1.0 / 300.0));
+                if (_rng.NextDouble() >= 1.0 - Math.Exp(-dtFs / tau)) continue;
+
+                // Самая слабая связь молекулы (из равных — первая по порядку обхода, детерминированно).
+                var inMol = new HashSet<AtomId>(m.Atoms);
+                Bond weakest = null;
+                double we = double.MaxValue;
+                foreach (Bond b in w.Bonds)
+                {
+                    if (!b.IsFormed || !inMol.Contains(b.A)) continue;
+                    double e = BondEnergies.Get(w.Elements[b.Ia], w.Elements[b.Ib], b.Order);
+                    if (e < we) { we = e; weakest = b; }
+                }
+                if (weakest == null) continue;
+                SplitBond(weakest, DecayFragmentEnergyKcal);
+                Emit(SimEventType.MoleculeDecayed, weakest.A, weakest.B, 0, m.Formula);
+            }
+            _decayTemp.Clear();
+            foreach (KeyValuePair<AtomId, double> kv in temps) _decayTemp[kv.Key] = kv.Value;
+        }
+
+        /// <summary>Гомолиз связи: кратная понижается на единицу, одинарная рвётся; осколки разлетаются.</summary>
+        private void SplitBond(Bond b, double fragmentKcal, bool wholeDiatomic = false)
+        {
+            World w = World;
+            int i = b.Ia, j = b.Ib;
+            bool diatomic = w.AdjacentBonds[i].Count == 1 && w.AdjacentBonds[j].Count == 1;
+            if (b.Order > 1 && !(wholeDiatomic && diatomic)) w.SetBondOrder(b, b.Order - 1);
+            else w.RemoveBond(b);
+            Emit(SimEventType.BondBroken, b.A, b.B, b.Id);
+            _rules.ForbidRebond(b.A, b.B, Tick + SparkRebondCooldownTicks);
+
+            Vec3 axis = (w.Positions[j] - w.Positions[i]).Normalized();
+            double mi = w.Masses[i], mj = w.Masses[j];
+            double mu = mi * mj / (mi + mj);
+            double p = Math.Sqrt(2.0 * fragmentKcal * Units.AccelFactor * mu);
+            w.Velocities[i] -= axis * (p / mi);
+            w.Velocities[j] += axis * (p / mj);
         }
 
         /// <summary>Энергия разлёта осколков после расщепления связи искрой, ккал/моль.</summary>

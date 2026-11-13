@@ -26,7 +26,9 @@ namespace Nerv.Core.Sim
         /// <summary>Сработала реакция из каталога. Text = id реакции, Value = индекс в Simulation.ReactionLog.</summary>
         ReactionFired,
         /// <summary>Выделилось (Value &gt; 0) или поглотилось тепло, кДж/моль. Text = пресет эффекта.</summary>
-        HeatReleased
+        HeatReleased,
+        /// <summary>Неустойчивая частица распалась сама. Text = её формула, A и B — атомы разорванной связи.</summary>
+        MoleculeDecayed
     }
 
     /// <summary>

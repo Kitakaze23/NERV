@@ -57,7 +57,9 @@ namespace Nerv.Core.Tests
         public static void Builder_MoleculeSurvivesAndIsRecognized()
         {
             // Каждое ковалентное вещество базы: собрали при 300 K, прогнали 1 пс — молекула цела и опознана.
-            foreach (CompoundInfo c in Buildable().Where(x => !x.Smiles.Contains('.')))
+            // Неустойчивые по базе (метилгидропероксид, диазен…) распадаются сами — их проверяет DecayTests.
+            foreach (CompoundInfo c in Buildable().Where(x => !x.Smiles.Contains('.') &&
+                         !((x.Hazard ?? "").Contains("неустойч") && !x.Smiles.Contains('['))))
             {
                 Simulation sim = TestUtil.NewSim(300, 7, withData: true);
                 BuildMolecule cmd = sim.Apply(new BuildMolecule(c.Smiles, Vec3.Zero));

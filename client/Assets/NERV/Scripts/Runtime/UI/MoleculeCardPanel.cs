@@ -106,8 +106,8 @@ namespace Nerv.Client.UI
 
             // Шапка: статус + закрыть.
             HorizontalLayoutGroup head = NervUI.Row(_content, 8, "Head");
-            string badge = m.IsRadical ? "Радикал" : known ? "Опознано" : "Неизвестное соединение";
-            Color badgeColor = m.IsRadical ? NervUI.Heat : known ? NervUI.Energy : NervUI.Muted;
+            string badge = m.Unstable ? "Неустойчиво" : m.IsRadical ? "Радикал" : known ? "Опознано" : "Неизвестное соединение";
+            Color badgeColor = m.Unstable || m.IsRadical ? NervUI.Heat : known ? NervUI.Energy : NervUI.Muted;
             Image b = NervUI.Box(head.transform, "Badge", badgeColor, 6, false);
             Text bt = NervUI.Label(b.transform, badge, NervUI.SemiBold, 12, NervUI.Ink, TextAnchor.MiddleCenter);
             NervUI.Stretch(bt.rectTransform);
@@ -133,7 +133,8 @@ namespace Nerv.Client.UI
             NervUI.Size(formula, formula.preferredWidth, 34);
             if (info?.Category != null) Tag(fr.transform, info.Category, NervUI.Energy);
             if (!string.IsNullOrEmpty(info?.Hazard)) Tag(fr.transform, info.Hazard, NervUI.Heat);
-            if (m.IsRadical && (info == null || info.Category != "радикал")) Tag(fr.transform, "нестабильно", NervUI.Heat);
+            if (m.Unstable && (info?.Hazard == null || !info.Hazard.Contains("неустойч"))) Tag(fr.transform, "распадётся", NervUI.Heat);
+            else if (m.IsRadical && (info == null || info.Category != "радикал")) Tag(fr.transform, "нестабильно", NervUI.Heat);
 
             Divider();
 
@@ -175,9 +176,12 @@ namespace Nerv.Client.UI
             else if (!known)
             {
                 Section("Что это");
-                NervUI.Label(_content, m.IsRadical
+                NervUI.Label(_content, m.Unstable
+                    ? "Частица держится на слабой связи — например, кислород–кислород или азот–азот. Такие вещества распадаются сами: " +
+                      "связь рвётся, и получаются два радикала. В тепле это происходит за доли наносекунды, на холоде частица живёт заметно дольше."
+                    : m.IsRadical
                     ? "Частица с неспаренными электронами (радикал). Такие частицы живут недолго: при первой встрече вступают в реакцию."
-                    : "Такого вещества пока нет в базе NERV. Возможно, оно неустойчиво или встречается редко.",
+                    : "Такого вещества пока нет в базе Mendal. Возможно, оно встречается редко.",
                     NervUI.Regular, 14, NervUI.TextSoft);
             }
 

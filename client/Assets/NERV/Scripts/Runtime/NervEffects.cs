@@ -75,6 +75,7 @@ namespace Nerv.Client
             }
             foreach (SimEvent e in app.Events)
                 if (e.Type == SimEventType.MoleculeIdentified) IdentifiedPulse(app, e);
+                else if (e.Type == SimEventType.MoleculeDecayed) DecayFlash(app, e);
             UpdateTrails(app);
 
             for (int i = _active.Count - 1; i >= 0; i--)
@@ -113,6 +114,19 @@ namespace Nerv.Client
         /// Кольцо-пульс вокруг только что опознанной молекулы (концепт 7.2). Вещество, впервые
         /// появившееся в сцене, — заметный пульс; повторное — лёгкий.
         /// </summary>
+        /// <summary>Распад неустойчивой частицы: короткая янтарная вспышка на месте разорванной связи.</summary>
+        private void DecayFlash(NervApp app, SimEvent e)
+        {
+            if (_active.Count > 40) return;
+            WorldSnapshot snap = app.Snapshot;
+            for (int i = 0; i < snap.AtomCount; i++)
+                if (snap.Ids[i] == e.A)
+                {
+                    Spawn(app.AtomWorld(i), NervEnvironment.Heat, 0.1f, 0.35f, 3f);
+                    return;
+                }
+        }
+
         private void IdentifiedPulse(NervApp app, SimEvent e)
         {
             if (_scene != app.SceneName)

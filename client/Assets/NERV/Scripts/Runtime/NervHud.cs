@@ -102,6 +102,8 @@ namespace Nerv.Client
             foreach (SimEvent e in app.Events)
                 if (e.Type == SimEventType.MoleculeIdentified && e.Text != null && !e.Text.StartsWith("Атомарный"))
                     AddJournal(e.Text, "опознано", NervUI.Energy);
+                else if (e.Type == SimEventType.MoleculeDecayed && e.Text != null)
+                    AddJournal(NervDirector.Pretty(e.Text, 0) + " распалось", "неустойчиво · распад по слабой связи", NervUI.Heat);
             foreach (ReactionRecord r in app.Reactions)
             {
                 string kind = StepTitle(r.Reaction.Name).ToLowerInvariant() + (r.Reaction.DeltaHKj < 0 ? " · экзо" : r.Reaction.DeltaHKj > 0 ? " · эндо" : "");
@@ -617,6 +619,7 @@ namespace Nerv.Client
                 if (m.Charge != 0 && _grouped.Contains(m.Atoms[0])) continue; // ион учтён в составе соли
                 string key = "<color=#FFFFFF>" + NervDirector.Pretty(m.Formula, m.Charge) + "</color>  " + (m.Name ?? "неизвестное соединение");
                 if (m.IsRadical && m.Atoms.Count > 1) key = "<color=#FFB547>" + NervDirector.Pretty(m.Formula, m.Charge) + "</color>  " + (m.Name ?? "радикал");
+                if (m.Unstable) key = "<color=#FFB547>" + NervDirector.Pretty(m.Formula, m.Charge) + "</color>  " + (m.Name ?? "неустойчивое соединение");
                 counts.TryGetValue(key, out int c);
                 counts[key] = c + 1;
             }
@@ -769,8 +772,9 @@ namespace Nerv.Client
                     if (m.Atoms.Count < 2 && !ion) continue;
                     if (ion && _grouped.Contains(m.Atoms[0])) continue;
                     string name = m.Name ?? "?";
-                    if (m.IsRadical && m.Atoms.Count > 1 && (m.Name == null || !m.Name.Contains("радикал"))) name += " · радикал";
-                    if (PlaceTag(app, cam, used, m.Atoms, NervDirector.Pretty(m.Formula, m.Charge), name, m.Name == null, m.IsRadical, 0.35f))
+                    if (m.Unstable) name = (m.Name ?? "") + (m.Name == null ? "неустойчиво" : " · неустойчиво");
+                    else if (m.IsRadical && m.Atoms.Count > 1 && (m.Name == null || !m.Name.Contains("радикал"))) name += " · радикал";
+                    if (PlaceTag(app, cam, used, m.Atoms, NervDirector.Pretty(m.Formula, m.Charge), name, m.Name == null && !m.Unstable, m.IsRadical || m.Unstable, 0.35f))
                         used++;
                 }
             }

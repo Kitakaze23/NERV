@@ -25,6 +25,10 @@ namespace Nerv.Client
         private readonly List<Matrix4x4> _highlight = new List<Matrix4x4>();
         private readonly List<Matrix4x4> _cations = new List<Matrix4x4>();
         private readonly List<Matrix4x4> _anions = new List<Matrix4x4>();
+        /// <summary>Неустойчивые частицы: янтарный мерцающий ореол — «скоро распадётся».</summary>
+        private readonly List<Matrix4x4> _unstable = new List<Matrix4x4>();
+        private readonly HashSet<AtomId> _unstableAtoms = new HashSet<AtomId>();
+        private Material _unstableMaterial;
 
         // Свечение раскалённых атомов в пламени: три ступени «чёрного тела» (тёмно-оранжевый → жёлто-белый).
         private static readonly float[] HeatSteps = { 900f, 1600f, 2500f };
@@ -67,6 +71,8 @@ namespace Nerv.Client
             // Ореолы ионов: катион — тёплый, анион — холодный (как «плюс» и «минус» на схемах).
             _cationMaterial = MakeHalo(new Color(1f, 0.45f, 0.25f), 0.9f, 0.18f);
             _anionMaterial = MakeHalo(new Color(0.3f, 0.6f, 1f), 0.9f, 0.18f);
+            _unstableMaterial = MakeHalo(new Color(1f, 0.62f, 0.18f), 1.1f, 0.55f);
+            if (_unstableMaterial != null) _unstableMaterial.SetFloat("_PulseSpeed", 11f);
             _hotMaterials[0] = MakeHalo(new Color(1f, 0.28f, 0.05f), 0.7f, 0.25f);
             _hotMaterials[1] = MakeHalo(new Color(1f, 0.5f, 0.12f), 1.1f, 0.25f);
             _hotMaterials[2] = MakeHalo(new Color(1f, 0.85f, 0.55f), 1.6f, 0.25f);
@@ -197,6 +203,12 @@ namespace Nerv.Client
             _highlight.Clear();
             _cations.Clear();
             _anions.Clear();
+            _unstable.Clear();
+            _unstableAtoms.Clear();
+            if (NervView.Annotations)
+                foreach (Molecule m in snap.Molecules)
+                    if (m.Unstable)
+                        foreach (AtomId id in m.Atoms) _unstableAtoms.Add(id);
             foreach (List<Matrix4x4> l in _hot) l.Clear();
             _frost.Clear();
             // Сглаживание температуры атома (~0,15 с): мгновенная скорость отдельного атома слишком шумная.
@@ -249,6 +261,8 @@ namespace Nerv.Client
                     (q > 0 ? _cations : _anions).Add(Matrix4x4.TRS(p, Quaternion.identity, Vector3.one * k));
                 }
                 if (snap.FreeValences[i] > 0 && NervView.Annotations) AddValenceDots(app, snap, i, p, r);
+                if (_unstableAtoms.Count > 0 && _unstableAtoms.Contains(snap.Ids[i]))
+                    _unstable.Add(Matrix4x4.TRS(p, Quaternion.identity, Vector3.one * (2f * r * 1.55f)));
             }
 
             // Связи.
@@ -287,6 +301,7 @@ namespace Nerv.Client
             Draw(_sphere, _highlightMaterial, _highlight, false);
             if (_cationMaterial != null) Draw(_sphere, _cationMaterial, _cations, false);
             if (_anionMaterial != null) Draw(_sphere, _anionMaterial, _anions, false);
+            if (_unstableMaterial != null) Draw(_sphere, _unstableMaterial, _unstable, false);
             if (_frostMaterial != null) Draw(_sphere, _frostMaterial, _frost, false);
             for (int step = 0; step < _hot.Length; step++)
                 if (_hotMaterials[step] != null) Draw(_sphere, _hotMaterials[step], _hot[step], false);

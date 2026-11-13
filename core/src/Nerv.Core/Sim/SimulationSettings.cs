@@ -5,6 +5,11 @@ namespace Nerv.Core.Sim
     /// <summary>Параметры симуляции. «Игровые» коэффициенты подобраны под наглядность, а не под точность.</summary>
     public sealed class SimulationSettings
     {
+        /// <summary>Средняя жизнь неустойчивой частицы при 300 K, пс (игровая шкала: успеть увидеть и распасться).</summary>
+        public double UnstableLifetimePs { get; set; } = 4.0;
+        /// <summary>Доля энергии слабой связи, задающая чувствительность распада к температуре (аррениусовский барьер).</summary>
+        public double UnstableBarrierFraction { get; set; } = 0.2;
+
         // --- Интегратор и термостат ---
         /// <summary>Шаг интегрирования, фс.</summary>
         public double TimeStepFs { get; set; } = 0.5;

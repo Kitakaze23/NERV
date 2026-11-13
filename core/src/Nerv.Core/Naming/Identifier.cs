@@ -1,3 +1,4 @@
+using Nerv.Core.Data;
 using System;
 using System.Collections.Generic;
 using System.Text;
@@ -38,6 +39,7 @@ namespace Nerv.Core.Naming
                 int fv = 0;
                 foreach (AtomId id in m.Atoms) fv += w.GetFreeValence(id);
                 m.FreeValence = fv;
+                ClassifyStability(sim, m);
                 if (m.Compound == null && m.Ion == null)
                 {
                     // Одиночный атом без записи в базе — называем по элементу, но не объявляем в журнале.
@@ -51,6 +53,42 @@ namespace Nerv.Core.Naming
                     sim.Emit(SimEventType.MoleculeIdentified, m.Atoms[0], AtomId.None, 0, m.Name);
             }
             _seenMolecules = seen;
+        }
+
+        /// <summary>Порог «слабой» связи, ккал/моль: O–O 35, N–N 38, F–O 45, Cl–N 46, N–O 48, Cl–O 49.</summary>
+        public const double WeakBondEnergy = 50.0;
+        /// <summary>Условная энергия распада веществ, помеченных в базе как неустойчивые (диазен, HOF).</summary>
+        private const double KnownUnstableEnergy = 40.0;
+
+        private static void ClassifyStability(Simulation sim, Molecule m)
+        {
+            m.Unstable = false;
+            m.DecayBondEnergy = 0;
+            if (m.Atoms.Count < 2 || m.Charge != 0 || m.Ion != null) return;
+            World w = sim.World;
+            if (m.Compound != null)
+            {
+                bool marked = m.Compound.Hazard != null && m.Compound.Hazard.IndexOf("неустойч", StringComparison.Ordinal) >= 0;
+                if (marked && !m.IsRadical)
+                {
+                    m.Unstable = true;
+                    m.DecayBondEnergy = KnownUnstableEnergy;
+                }
+                return;
+            }
+            double weakest = double.MaxValue;
+            var inMol = new HashSet<AtomId>(m.Atoms);
+            foreach (Bond b in w.Bonds)
+            {
+                if (!b.IsFormed || !inMol.Contains(b.A)) continue;
+                double e = BondEnergies.Get(w.GetElement(b.A), w.GetElement(b.B), b.Order);
+                if (e < weakest) weakest = e;
+            }
+            if (weakest < WeakBondEnergy)
+            {
+                m.Unstable = true;
+                m.DecayBondEnergy = weakest;
+            }
         }
 
         public void UpdateGroups(Simulation sim)

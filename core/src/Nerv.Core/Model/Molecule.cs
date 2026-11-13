@@ -29,6 +29,14 @@ namespace Nerv.Core.Model
         /// </summary>
         public int FreeValence { get; internal set; }
         public bool IsRadical => FreeValence > 0;
+        /// <summary>
+        /// Неустойчивая частица: неизвестна базе и держится на слабой связи (O–O, N–N, N–O, Cl–O…),
+        /// либо помечена в базе как неустойчивая. Со временем сама распадается по самой слабой связи
+        /// (быстрее при нагреве, медленнее на холоде). Известные радикалы сюда не входят — они просто реакционноспособны.
+        /// </summary>
+        public bool Unstable { get; internal set; }
+        /// <summary>Энергия связи, по которой пойдёт распад, ккал/моль (0 — не неустойчива).</summary>
+        public double DecayBondEnergy { get; internal set; }
         /// <summary>Для одиночного нейтрального атома без записи в базе: «Натрий (атом)».</summary>
         public string AtomName { get; internal set; }
 
