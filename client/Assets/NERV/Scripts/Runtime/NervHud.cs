@@ -190,8 +190,18 @@ namespace Nerv.Client
             row.padding = new RectOffset(20, 10, 10, 10);
             row.childAlignment = TextAnchor.MiddleLeft;
 
-            Image logo = NervUI.Soft(row.transform, "Logo", NervUI.Energy);
-            NervUI.Size(logo, 22, 22);
+            // Знак Mendal: буква M из атомов и связей (Resources/Textures/MendalMark.png).
+            Image logo = NervUI.Rect(row.transform, "Logo").gameObject.AddComponent<Image>();
+            Texture2D mark = Resources.Load<Texture2D>("Textures/MendalMark");
+            if (mark != null)
+            {
+                mark.wrapMode = TextureWrapMode.Clamp;
+                logo.sprite = Sprite.Create(mark, new UnityEngine.Rect(0, 0, mark.width, mark.height), new Vector2(0.5f, 0.5f));
+                logo.preserveAspect = true;
+            }
+            else logo.color = NervUI.Energy;
+            logo.raycastTarget = false;
+            NervUI.Size(logo, 34, 34);
             Text name = NervUI.Label(row.transform, "Mendal", NervUI.Display, 18, Color.white, TextAnchor.MiddleLeft);
             name.horizontalOverflow = HorizontalWrapMode.Overflow;
             NervUI.Size(name, 96, 44);
