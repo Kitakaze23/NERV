@@ -148,4 +148,22 @@ namespace Nerv.Core.Sim
         }
         internal override void Execute(Simulation sim) => sim.ExecLocalTemperature(this);
     }
+
+    /// <summary>
+    /// Собрать в сцене готовую молекулу по SMILES (кнопка «Собрать в сцене» у изомеров, вставка из базы).
+    /// Ядро ставит её около <see cref="Center"/>, но не впритык к уже имеющимся атомам; ориентация случайная.
+    /// </summary>
+    public sealed class BuildMolecule : Command
+    {
+        public string Smiles { get; }
+        public Vec3 Center { get; }
+        /// <summary>Атомы новой молекулы (заполняется при исполнении; пусто, если SMILES не разобран).</summary>
+        public AtomId[] Result { get; internal set; } = Array.Empty<AtomId>();
+        public BuildMolecule(string smiles, Vec3 center)
+        {
+            Smiles = smiles ?? throw new ArgumentNullException(nameof(smiles));
+            Center = center;
+        }
+        internal override void Execute(Simulation sim) => sim.ExecBuildMolecule(this);
+    }
 }

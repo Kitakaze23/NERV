@@ -191,7 +191,26 @@ namespace Nerv.Client.UI
                 box.GetComponent<VerticalLayoutGroup>().padding = new RectOffset(16, 16, 12, 12);
                 NervUI.Label(box.transform, "Та же формула " + FormulaText.Subscript(m.Formula) + " — другое вещество", NervUI.Regular, 12, NervUI.Muted);
                 foreach (CompoundInfo iso in isomers.Take(3))
-                    NervUI.Label(box.transform, iso.NameRu, NervUI.SemiBold, 15, Color.white);
+                {
+                    HorizontalLayoutGroup row = NervUI.Row(box.transform, 10, "Isomer");
+                    row.childAlignment = TextAnchor.MiddleLeft;
+                    row.childControlWidth = true;
+                    row.childForceExpandWidth = false;
+                    Text isoName = NervUI.Label(row.transform, iso.NameRu, NervUI.SemiBold, 15, Color.white);
+                    NervUI.Size(isoName, -1, 34, 1);
+                    string smiles = iso.Smiles;
+                    Button build = NervUI.Button(row.transform, "Собрать в сцене", NervUI.ButtonStyle.Chip,
+                        () => BuildNear(smiles), 12, 8);
+                    NervUI.Size(build, 132, 30);
+                }
+            }
+
+            // Ещё одна такая же молекула — удобно для реакций «два одинаковых».
+            if (info != null && !string.IsNullOrEmpty(info.Smiles))
+            {
+                string own = info.Smiles;
+                Button more = NervUI.Button(_content, "Добавить ещё одну", NervUI.ButtonStyle.Ghost, () => BuildNear(own), 13);
+                NervUI.Size(more, -1, 38);
             }
 
             string footer = !string.IsNullOrEmpty(info?.WikidataId) ? "Источник: Wikidata " + info.WikidataId
@@ -206,6 +225,30 @@ namespace Nerv.Client.UI
             { "F", new Color32(0xA8, 0xE0, 0x80, 0xFF) }, { "Na", new Color32(0xC4, 0x9B, 0xFF, 0xFF) },
             { "S", new Color32(0xF2, 0xD3, 0x3A, 0xFF) }, { "Cl", new Color32(0x6E, 0xE0, 0x7F, 0xFF) },
         };
+
+        /// <summary>
+        /// Собрать вещество рядом с открытой молекулой: ядро само отодвинет его, если место занято.
+        /// </summary>
+        private void BuildNear(string smiles)
+        {
+            NervApp app = NervApp.Instance;
+            WorldSnapshot snap = app != null ? app.Snapshot : null;
+            if (snap == null) return;
+            Molecule m = snap.Molecules.FirstOrDefault(x => x.Atoms.Contains(_atom));
+            var atoms = new HashSet<AtomId>(m != null ? m.Atoms : (IEnumerable<AtomId>)new[] { _atom });
+            Vector3 c = Vector3.zero;
+            int count = 0;
+            for (int i = 0; i < snap.AtomCount; i++)
+            {
+                if (!atoms.Contains(snap.Ids[i])) continue;
+                c += new Vector3(snap.Positions[i * 3], snap.Positions[i * 3 + 1], snap.Positions[i * 3 + 2]);
+                count++;
+            }
+            if (count > 0) c /= count;
+            // Сбоку от исходной, примерно в плоскости экрана.
+            var at = new Nerv.Core.Numerics.Vec3(c.x + 6, c.y, c.z);
+            app.Submit(new BuildMolecule(smiles, at));
+        }
 
         private void BuildStructure(WorldSnapshot snap, Molecule m)
         {

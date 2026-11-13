@@ -395,6 +395,74 @@ namespace Nerv.Core.Sim
             }
         }
 
+        internal void ExecBuildMolecule(BuildMolecule c)
+        {
+            MoleculeTemplate t;
+            try { t = MoleculeBuilder.Build(c.Smiles); }
+            catch (Exception) { return; } // Неразборчивый SMILES или неподдерживаемый элемент — ничего не ставим.
+
+            // Случайный поворот (единичный кватернион из генератора симуляции — повторы совпадут).
+            double q0 = _rng.NextGaussian(), q1 = _rng.NextGaussian(), q2 = _rng.NextGaussian(), q3 = _rng.NextGaussian();
+            double qn = Math.Sqrt(q0 * q0 + q1 * q1 + q2 * q2 + q3 * q3) + 1e-12;
+            q0 /= qn; q1 /= qn; q2 /= qn; q3 /= qn;
+            var local = new Vec3[t.AtomCount];
+            for (int i = 0; i < local.Length; i++) local[i] = Rotate(t.Positions[i], q0, q1, q2, q3);
+
+            Vec3 at = FindFreeSpot(c.Center, local, t.Radius);
+            var ids = new AtomId[t.AtomCount];
+            for (int i = 0; i < ids.Length; i++)
+                ids[i] = ExecAddAtom(new AddAtom(t.Z[i], at + local[i], t.Charges[i]));
+            foreach ((int a, int b, int order) in t.Bonds)
+                ExecAddBond(new AddBond(ids[a], ids[b], order));
+            c.Result = ids;
+        }
+
+        private static Vec3 Rotate(Vec3 v, double w, double x, double y, double z)
+        {
+            // v' = q v q*, развёрнуто.
+            var u = new Vec3(x, y, z);
+            Vec3 t = 2.0 * Vec3.Cross(u, v);
+            return v + w * t + Vec3.Cross(u, t);
+        }
+
+        /// <summary>Ближайшее к желаемой точке место, где новая молекула не налезает на имеющиеся атомы (≥ 2,2 Å).</summary>
+        private Vec3 FindFreeSpot(Vec3 center, Vec3[] local, double radius)
+        {
+            const double Clearance = 2.2;
+            if (Fits(center, local, Clearance)) return center;
+            double step = Math.Max(1.5, radius * 0.75);
+            const int Dirs = 16;
+            for (int ring = 1; ring <= 8; ring++)
+                for (int k = 0; k < Dirs; k++)
+                {
+                    // Точки Фибоначчи на сфере — равномерно во все стороны.
+                    double yy = 1 - 2 * (k + 0.5) / Dirs;
+                    double rr = Math.Sqrt(1 - yy * yy);
+                    double phi = k * 2.399963229728653 + ring;
+                    var dir = new Vec3(rr * Math.Cos(phi), yy, rr * Math.Sin(phi));
+                    Vec3 p = center + dir * (step * ring);
+                    if (Fits(p, local, Clearance)) return p;
+                }
+            return center;
+        }
+
+        private bool Fits(Vec3 at, Vec3[] local, double clearance)
+        {
+            World w = World;
+            double c2 = clearance * clearance;
+            if (Settings.BoxHalfSize > 0)
+                foreach (Vec3 l in local)
+                {
+                    Vec3 d = at + l - Settings.BoxCenter;
+                    double h = Settings.BoxHalfSize;
+                    if (Math.Abs(d.X) > h || Math.Abs(d.Y) > h || Math.Abs(d.Z) > h) return false;
+                }
+            for (int i = 0; i < w.AtomCount; i++)
+                foreach (Vec3 l in local)
+                    if ((w.Positions[i] - at - l).LengthSquared < c2) return false;
+            return true;
+        }
+
         internal void ExecSpark(Spark c)
         {
             World w = World;
