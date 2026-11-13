@@ -19,7 +19,9 @@ namespace Nerv.Client
         /// <summary>Нагрев: пока кнопка зажата, атомы под курсором разогреваются.</summary>
         Heat,
         /// <summary>Холод: пока кнопка зажата, атомы под курсором остывают.</summary>
-        Cold
+        Cold,
+        /// <summary>Лаборатория: измерить атом, расстояние или угол (1–3 щелчка).</summary>
+        Measure
     }
 
     /// <summary>
@@ -30,6 +32,8 @@ namespace Nerv.Client
     public sealed class NervInteraction : MonoBehaviour
     {
         public NervTool Tool = NervTool.Hand;
+        public static NervInteraction Instance { get; private set; }
+        private void OnEnable() => Instance = this;
         public string Element = "H";
 
         private MoleculeView _view;
@@ -104,7 +108,7 @@ namespace Nerv.Client
             Ray ray = cam.ScreenPointToRay(NervInput.PointerPosition);
             bool overUi = UI.NervUI.PointerOverUi;
             int hit = overUi ? -1 : Pick(app, ray);
-            _view.HoverIndex = (Tool == NervTool.Hand || Tool == NervTool.Erase) ? hit : -1;
+            _view.HoverIndex = (Tool == NervTool.Hand || Tool == NervTool.Erase || Tool == NervTool.Measure) ? hit : -1;
 
             bool click = NervInput.LeftPressed && !overUi && !NervInput.AltHeld;
             if (click)
@@ -132,6 +136,10 @@ namespace Nerv.Client
                         NervHistory.Instance?.Record();
                         app.Submit(new Spark(NervApp.ToSim(hit >= 0 ? app.AtomWorld(hit) : PlanePoint(cam, ray, app)), radius: 4, kelvin: 6000));
                         NervEffects.Instance?.SparkFlash(hit >= 0 ? app.AtomWorld(hit) : PlanePoint(cam, ray, app));
+                        break;
+                    case NervTool.Measure:
+                        if (hit >= 0) UI.LabPanel.Instance?.Pick(app.Snapshot.Ids[hit]);
+                        else UI.LabPanel.Instance?.ClearMeasure();
                         break;
                     case NervTool.Erase:
                         if (hit >= 0)

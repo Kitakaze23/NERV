@@ -37,6 +37,8 @@ namespace Nerv.Client
         public double TimeScale { get; private set; } = 1;
         public float BoxHalfSize { get; private set; } = 12f;
         public string SceneName { get; private set; } = "";
+        /// <summary>Режим «Лаборатория»: графики и измерения поверх той же песочницы.</summary>
+        public bool LabMode { get; set; }
 
         private void Awake()
         {
@@ -51,6 +53,7 @@ namespace Nerv.Client
             gameObject.AddComponent<NervHistory>();
             gameObject.AddComponent<UI.PeriodicTablePanel>();
             gameObject.AddComponent<UI.MoleculeCardPanel>();
+            gameObject.AddComponent<UI.LabPanel>();
             gameObject.AddComponent<NervHud>();
             NervEnvironment.MainCamera.gameObject.AddComponent<NervCameraController>();
 

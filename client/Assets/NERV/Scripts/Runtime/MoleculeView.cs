@@ -235,7 +235,8 @@ namespace Nerv.Client
                 Vector3 p = app.AtomWorld(i);
                 float r = VisualRadius(e) * s;
                 List(_atoms, e.Z).Add(Matrix4x4.TRS(p, Quaternion.identity, Vector3.one * (2f * r)));
-                if (Selected.Count > 0 && Selected.Contains(snap.Ids[i]))
+                if ((Selected.Count > 0 && Selected.Contains(snap.Ids[i])) ||
+                    (UI.LabPanel.Instance != null && UI.LabPanel.Instance.MeasuredCount > 0 && UI.LabPanel.Instance.IsMeasured(snap.Ids[i])))
                     _highlight.Add(Matrix4x4.TRS(p, Quaternion.identity, Vector3.one * (2f * r * 1.4f)));
                 else if (i == HoverIndex || i == GrabbedIndex)
                     _highlight.Add(Matrix4x4.TRS(p, Quaternion.identity, Vector3.one * (2f * r * (i == GrabbedIndex ? 1.7f : 1.5f))));

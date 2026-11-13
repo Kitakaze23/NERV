@@ -18,7 +18,8 @@ namespace Nerv.Client
     /// </summary>
     public sealed class NervHud : MonoBehaviour
     {
-        private const float Margin = 24f, RightWidth = 240f, LeftWidth = 260f;
+        public const float Margin = 24f;
+        private const float RightWidth = 240f, LeftWidth = 260f;
         /// <summary>Отступ справа для карточки вещества: правая колонка + зазор.</summary>
         public const float RightColumn = Margin + RightWidth + 16f;
         public const float TopBarBottom = 96f;
@@ -41,7 +42,8 @@ namespace Nerv.Client
         private Button _vacuum, _water;
         private readonly Dictionary<NervView.Mode, Button> _views = new Dictionary<NervView.Mode, Button>();
         private readonly Dictionary<NervTool, Button> _tools = new Dictionary<NervTool, Button>();
-        private Button _tableTool;
+        private Button _tableTool, _measureTool, _sandboxButton, _labButton;
+        private GameObject _miniTable;
 
         // Журнал.
         private sealed class JournalEntry
@@ -208,16 +210,15 @@ namespace Nerv.Client
             name.horizontalOverflow = HorizontalWrapMode.Overflow;
             NervUI.Size(name, 96, 44);
 
-            Button sandbox = NervUI.Button(row.transform, "Песочница", NervUI.ButtonStyle.Chip, null, 14);
-            NervUI.Size(sandbox, 112, 44);
-            // Режимы, которых ещё нет: приглушены, «скоро» — мелкой второй строкой.
-            foreach (string mode in new[] { "Уроки", "Лаборатория" })
-            {
-                Button b = NervUI.Button(row.transform, mode + "\n<size=10>скоро</size>", NervUI.ButtonStyle.Plain, null, 13);
-                b.interactable = false;
-                LabelOf(b).lineSpacing = 0.85f;
-                NervUI.Size(b, mode.Length > 6 ? 112 : 76, 44);
-            }
+            _sandboxButton = NervUI.Button(row.transform, "Песочница", NervUI.ButtonStyle.Ghost, () => SetLab(app, false), 14);
+            NervUI.Size(_sandboxButton, 104, 44);
+            // Уроков ещё нет: приглушены, «скоро» — мелкой второй строкой.
+            Button lessons = NervUI.Button(row.transform, "Уроки\n<size=10>скоро</size>", NervUI.ButtonStyle.Plain, null, 13);
+            lessons.interactable = false;
+            LabelOf(lessons).lineSpacing = 0.85f;
+            NervUI.Size(lessons, 76, 44);
+            _labButton = NervUI.Button(row.transform, "Лаборатория", NervUI.ButtonStyle.Ghost, () => SetLab(app, true), 14);
+            NervUI.Size(_labButton, 120, 44);
 
             RectTransform spacer = NervUI.Rect(row.transform, "Spacer");
             NervUI.Size(spacer, 10, 44, 1);
@@ -372,11 +373,22 @@ namespace Nerv.Client
             AddTool(grid, "Холод", NervTool.Cold);
             AddTool(grid, "Удалить", NervTool.Erase);
             _tableTool = NervUI.Button(grid, "Таблица · T", NervUI.ButtonStyle.Ghost, () => PeriodicTablePanel.Instance?.Toggle(), 13);
+            // В «Лаборатории» на месте таблицы — «Измерить» (таблица по-прежнему открывается клавишей T).
+            AddTool(grid, "Измерить", NervTool.Measure);
+            _measureTool = _tools[NervTool.Measure];
+            _measureTool.gameObject.SetActive(false);
 
             NervUI.Divider(panel.transform);
             NervUI.Property(panel.transform, "Атомов", out _atoms);
             NervUI.Property(panel.transform, "Частиц", out _particles);
             NervUI.Property(panel.transform, "Время", out _time);
+        }
+
+        private void SetLab(NervApp app, bool lab)
+        {
+            app.LabMode = lab;
+            if (lab) _interaction.Tool = NervTool.Measure;
+            else if (_interaction.Tool == NervTool.Measure) _interaction.Tool = NervTool.Hand;
         }
 
         private void AddTool(Transform grid, string text, NervTool tool)
@@ -439,6 +451,7 @@ namespace Nerv.Client
             const float cell = 25f, gap = 3f;
             float gridW = 18 * cell + 17 * gap, gridH = 7 * cell + 6 * gap;
             Image panel = NervUI.Panel(root, "Mini Table", 16);
+            _miniTable = panel.gameObject;
             RectTransform pr = panel.rectTransform;
             pr.anchorMin = pr.anchorMax = new Vector2(0, 0);
             pr.pivot = new Vector2(0, 0);
@@ -602,6 +615,8 @@ namespace Nerv.Client
             NervUI.SetActive(_qualityButton, !NervQuality.High);
             LabelOf(_pauseButton).text = app.Paused ? "Продолжить" : "Пауза";
             NervUI.SetActive(_pauseButton, app.Paused);
+            NervUI.SetActive(_sandboxButton, !app.LabMode);
+            NervUI.SetActive(_labButton, app.LabMode);
             foreach (KeyValuePair<NervView.Mode, Button> kv in _views) NervUI.SetActive(kv.Value, NervView.Current == kv.Key);
         }
 
@@ -661,6 +676,10 @@ namespace Nerv.Client
             NervUI.SetActive(_water, app.Medium == Medium.Water);
             foreach (KeyValuePair<NervTool, Button> kv in _tools) NervUI.SetActive(kv.Value, _interaction.Tool == kv.Key);
             NervUI.SetActive(_tableTool, PeriodicTablePanel.Instance != null && PeriodicTablePanel.Instance.IsOpen);
+            bool lab = app.LabMode;
+            if (_tableTool.gameObject.activeSelf == lab) _tableTool.gameObject.SetActive(!lab);
+            if (_measureTool.gameObject.activeSelf != lab) _measureTool.gameObject.SetActive(lab);
+            if (_miniTable.activeSelf == lab) _miniTable.SetActive(!lab);
             _atoms.text = snap.AtomCount.ToString();
             _particles.text = (snap.Molecules.Count(m => !(m.Charge != 0 && _grouped.Contains(m.Atoms[0]))) + snap.IonicGroups.Count).ToString();
             _time.text = NervUI.Num(snap.Tick * 0.5 / 1000.0, "0.0") + " пс";
