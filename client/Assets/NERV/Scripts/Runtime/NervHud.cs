@@ -555,7 +555,7 @@ namespace Nerv.Client
 
         private void RefreshTopBar(NervApp app)
         {
-            _sceneButtonText.text = (string.IsNullOrEmpty(app.SceneName) ? "Сцена" : app.SceneName) + "  ▾";
+            _sceneButtonText.text = (string.IsNullOrEmpty(app.SceneName) ? "Сцена" : app.SceneName) + "  ⌄";
             NervUI.SetActive(_slowButton, NervDirector.Instance != null && NervDirector.Instance.SlowMotion);
             NervUI.SetActive(_qualityButton, !NervQuality.High);
             LabelOf(_pauseButton).text = app.Paused ? "Продолжить" : "Пауза";

@@ -116,7 +116,7 @@ namespace Nerv.Client.UI
             string source = info != null ? (info.Curated ? "курированная запись" : "запись базы") : m.Ion != null ? "таблица ионов" : "";
             Text src = NervUI.Label(head.transform, source, NervUI.Regular, 12, NervUI.Muted, TextAnchor.MiddleLeft);
             NervUI.Size(src, -1, 24, 1);
-            Button close = NervUI.Button(head.transform, "✕", NervUI.ButtonStyle.Ghost, Close, 14, 10, "Close");
+            Button close = NervUI.Button(head.transform, "×", NervUI.ButtonStyle.Ghost, Close, 20, 10, "Close");
             NervUI.Size(close, 36, 36);
 
             // Название и формула.
@@ -337,7 +337,8 @@ namespace Nerv.Client.UI
             {
                 string sym = ElementTable.Get(snap.AtomicNumbers[idx[k]]).Symbol;
                 int q = snap.Charges[idx[k]];
-                string label = sym + (q > 0 ? "⁺" : q < 0 ? "⁻" : "");
+                // В JetBrains Mono нет надстрочных ⁺⁻ — обычные знаки.
+                string label = sym + (q > 0 ? "+" : q < 0 ? "−" : "");
                 Text t = NervUI.Label(box, label, NervUI.Mono, 15, StructColors.TryGetValue(sym, out Color col) ? col : NervUI.Text, TextAnchor.MiddleCenter);
                 t.horizontalOverflow = HorizontalWrapMode.Overflow;
                 RectTransform tr = t.rectTransform;
