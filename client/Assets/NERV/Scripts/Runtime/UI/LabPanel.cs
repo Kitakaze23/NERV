@@ -172,6 +172,7 @@ namespace Nerv.Client.UI
         /// <summary>Сбор точек идёт и в «Песочнице»: включил лабораторию — история уже есть.</summary>
         private void Collect(NervApp app)
         {
+            if (NervReplay.Active) return; // в повторе снимок — старый кадр, время «назад» не значит новую сцену
             WorldSnapshot snap = app.Snapshot;
             if (_scene != app.SceneName || snap.Tick < _lastSampleTick)
             {

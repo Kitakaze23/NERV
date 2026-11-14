@@ -54,6 +54,7 @@ namespace Nerv.Client
             gameObject.AddComponent<UI.PeriodicTablePanel>();
             gameObject.AddComponent<UI.MoleculeCardPanel>();
             gameObject.AddComponent<UI.LabPanel>();
+            gameObject.AddComponent<NervReplay>();
             gameObject.AddComponent<NervHud>();
             NervEnvironment.MainCamera.gameObject.AddComponent<NervCameraController>();
 
@@ -69,6 +70,7 @@ namespace Nerv.Client
             Host.DrainEvents(Events);
             Reactions.Clear();
             Host.DrainReactions(Reactions);
+            NervReplay.Instance?.AfterCopy(this); // запись кадров или подмена снимка кадром повтора
         }
 
         private void OnDisable() => StopHost();

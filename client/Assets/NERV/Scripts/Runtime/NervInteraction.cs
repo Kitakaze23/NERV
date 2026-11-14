@@ -87,6 +87,7 @@ namespace Nerv.Client
             NervApp app = NervApp.Instance;
             if (app == null) return;
             Camera cam = NervEnvironment.MainCamera;
+            if (NervReplay.Active) return; // в повторе сцена — запись, её не трогают
 
             int digit = NervInput.DigitPressed;
             if (digit >= 1 && digit <= Palette.Length)
