@@ -258,39 +258,129 @@ namespace Nerv.Client
             Button clear = NervUI.Button(row.transform, "Очистить", NervUI.ButtonStyle.Ghost, app.ClearAtoms, 13);
             NervUI.Size(clear, 96, 44);
 
-            // Выпадающий список сцен под кнопкой сцены (позиция уточняется при открытии).
+            // Выпадающее меню сцен под кнопкой сцены (позиция уточняется при открытии):
+            // слева — готовые сцены, справа — «Мои сцены» и действия с файлами.
             Image menu = NervUI.Panel(root, "Scene Menu", 14, NervUI.WithAlpha(NervUI.Energy, 0.3f));
             _sceneMenu = menu.rectTransform;
             _sceneMenu.anchorMin = _sceneMenu.anchorMax = new Vector2(1, 1);
             _sceneMenu.pivot = new Vector2(1, 1);
-            NervUI.Column(menu.gameObject, 10, 4);
+            HorizontalLayoutGroup cols = menu.gameObject.AddComponent<HorizontalLayoutGroup>();
+            cols.padding = new RectOffset(10, 10, 10, 10);
+            cols.spacing = 12;
+            cols.childControlWidth = cols.childControlHeight = true;
+            cols.childForceExpandWidth = false;
+            cols.childForceExpandHeight = false;
             menu.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
-            _sceneMenu.sizeDelta = new Vector2(280, 0);
+            _sceneMenu.sizeDelta = new Vector2(600, 0);
             menu.transform.Find("Border").gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
+
+            RectTransform left = MenuColumn(menu.transform, "Ready", 280);
+            NervUI.Section(left, "Готовые сцены");
             foreach (NervScenes.Preset preset in NervScenes.All)
             {
                 NervScenes.Preset p = preset;
-                Button b = NervUI.Button(menu.transform, p.Name, NervUI.ButtonStyle.Plain, () =>
+                MenuItem(left, p.Name, () =>
                 {
                     app.LoadScene(p);
                     _sceneMenu.gameObject.SetActive(false);
-                }, 14, 8, p.Name);
-                NervUI.Size(b, -1, 38);
-                Text t = b.GetComponentInChildren<Text>();
-                t.alignment = TextAnchor.MiddleLeft;
-                t.rectTransform.offsetMin = new Vector2(12, 0);
+                });
             }
+
+            RectTransform right = MenuColumn(menu.transform, "Mine", 286);
+            NervUI.Section(right, "Мои сцены");
+            _myScenes = MenuColumn(right, "List", 286);
+            ((VerticalLayoutGroup)_myScenes.GetComponent<VerticalLayoutGroup>()).padding = new RectOffset(0, 0, 0, 0);
+            NervUI.Divider(right);
+            MenuItem(right, "Сохранить сцену…", () =>
+            {
+                _sceneMenu.gameObject.SetActive(false);
+                NervSaves.Instance?.OpenSaveDialog();
+            });
+            MenuItem(right, "Снимок экрана", () =>
+            {
+                _sceneMenu.gameObject.SetActive(false);
+                NervSaves.Instance?.Screenshot();
+            });
+            MenuItem(right, "Журнал опыта · J", () =>
+            {
+                _sceneMenu.gameObject.SetActive(false);
+                ExperimentLogPanel.Instance?.Toggle();
+            });
+            MenuItem(right, "Открыть папку с файлами", () =>
+            {
+                _sceneMenu.gameObject.SetActive(false);
+                NervSaves.OpenFolder(NervSaves.Root);
+            });
             _sceneMenu.gameObject.SetActive(false);
             _sceneMenuAnchor = (RectTransform)scene.transform;
         }
 
         private RectTransform _sceneMenuAnchor;
+        private RectTransform _myScenes;
+
+        private static RectTransform MenuColumn(Transform parent, string name, float width)
+        {
+            RectTransform c = NervUI.Rect(parent, name);
+            VerticalLayoutGroup v = c.gameObject.AddComponent<VerticalLayoutGroup>();
+            v.spacing = 4;
+            v.childControlWidth = v.childControlHeight = true;
+            v.childForceExpandWidth = true;
+            v.childForceExpandHeight = false;
+            NervUI.Size(c, width);
+            return c;
+        }
+
+        private static Button MenuItem(Transform parent, string text, System.Action onClick)
+        {
+            Button b = NervUI.Button(parent, text, NervUI.ButtonStyle.Plain, onClick, 14, 8, text);
+            NervUI.Size(b, -1, 36);
+            Text t = b.GetComponentInChildren<Text>();
+            t.alignment = TextAnchor.MiddleLeft;
+            t.rectTransform.offsetMin = new Vector2(12, 0);
+            return b;
+        }
+
+        /// <summary>Список сохранённых сцен — пересобирается при каждом открытии меню (до 8 последних).</summary>
+        private void RebuildMyScenes()
+        {
+            for (int i = _myScenes.childCount - 1; i >= 0; i--) Destroy(_myScenes.GetChild(i).gameObject);
+            List<NervSaves.SavedScene> saved = NervSaves.List();
+            if (saved.Count == 0)
+            {
+                Text empty = NervUI.Label(_myScenes, "Пока пусто. Сохрани текущую сцену — она появится здесь.", NervUI.Regular, 12, NervUI.Muted);
+                NervUI.Size(empty, -1, 34);
+                return;
+            }
+            foreach (NervSaves.SavedScene sc in saved.Take(8))
+            {
+                NervSaves.SavedScene s = sc;
+                HorizontalLayoutGroup row = NervUI.Row(_myScenes, 4, "Saved");
+                row.childForceExpandWidth = false;
+                row.childControlWidth = true;
+                Button open = MenuItem(row.transform, s.Name, () =>
+                {
+                    _sceneMenu.gameObject.SetActive(false);
+                    NervSaves.Instance?.Load(s);
+                });
+                NervUI.Size(open, -1, 36, 1);
+                Text label = open.GetComponentInChildren<Text>();
+                label.horizontalOverflow = HorizontalWrapMode.Wrap;
+                label.verticalOverflow = VerticalWrapMode.Truncate;
+                Button del = NervUI.Button(row.transform, "×", NervUI.ButtonStyle.Plain, () =>
+                {
+                    NervSaves.Instance?.Delete(s);
+                    RebuildMyScenes();
+                }, 18, 8, "Delete");
+                NervUI.Size(del, 36, 36);
+            }
+        }
 
         private void ToggleSceneMenu()
         {
             bool open = !_sceneMenu.gameObject.activeSelf;
             _sceneMenu.gameObject.SetActive(open);
             if (!open) return;
+            RebuildMyScenes();
             // Под кнопкой сцены, правым краем к её правому краю.
             UnityEngine.Rect r = NervUI.ScreenRect(_sceneMenuAnchor);
             float scale = NervUI.Canvas.scaleFactor;
@@ -436,7 +526,14 @@ namespace Nerv.Client
             NervUI.Column(panel.gameObject, 16, 3);
             panel.gameObject.AddComponent<ContentSizeFitter>().verticalFit = ContentSizeFitter.FitMode.PreferredSize;
             panel.transform.Find("Border").gameObject.AddComponent<LayoutElement>().ignoreLayout = true;
-            NervUI.Section(panel.transform, "Журнал");
+            // Заголовок с ссылкой на полный журнал опыта.
+            HorizontalLayoutGroup head = NervUI.Row(panel.transform, 4, "Head");
+            head.childForceExpandWidth = false;
+            head.childControlWidth = true;
+            Text jt = NervUI.Section(head.transform, "Журнал");
+            NervUI.Size(jt, -1, 16, 1);
+            Button all = NervUI.Button(head.transform, "весь · J", NervUI.ButtonStyle.Plain, () => ExperimentLogPanel.Instance?.Toggle(), 11, 4);
+            NervUI.Size(all, 64, 18);
             for (int i = 0; i < JournalSize; i++)
             {
                 Text main = NervUI.Label(panel.transform, "", NervUI.SemiBold, 13, Color.white);
@@ -622,7 +719,7 @@ namespace Nerv.Client
 
         private void RefreshLeft(NervApp app, WorldSnapshot snap)
         {
-            NervScenes.Preset current = NervScenes.All.FirstOrDefault(p => p.Name == app.SceneName);
+            NervScenes.Preset current = app.CurrentPreset;
             _sceneTitle.text = current != null ? current.Name : "Своя сцена";
             _sceneHint.text = current != null ? current.Hint : "";
             _flame.text = snap.FlameActive ? "● Идёт горение" : "";

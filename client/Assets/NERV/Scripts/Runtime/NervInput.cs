@@ -127,6 +127,7 @@ namespace Nerv.Client
         {
             get
             {
+                if (UI.NervUI.IsTyping) return 0;
 #if ENABLE_INPUT_SYSTEM
                 Keyboard k = Keyboard.current;
                 if (k == null) return 0;
@@ -175,15 +176,16 @@ namespace Nerv.Client
         }
 
         /// <summary>Cmd/Ctrl+Z.</summary>
-        public static bool UndoPressed => CommandHeld && !ShiftHeld && KeyDown('z');
+        public static bool UndoPressed => !UI.NervUI.IsTyping && CommandHeld && !ShiftHeld && KeyDown('z');
 
         /// <summary>Cmd/Ctrl+Shift+Z или Ctrl+Y.</summary>
-        public static bool RedoPressed => CommandHeld && ((ShiftHeld && KeyDown('z')) || KeyDown('y'));
+        public static bool RedoPressed => !UI.NervUI.IsTyping && CommandHeld && ((ShiftHeld && KeyDown('z')) || KeyDown('y'));
 
         public static bool SpacePressed
         {
             get
             {
+                if (UI.NervUI.IsTyping) return false;
 #if ENABLE_INPUT_SYSTEM
                 return Keyboard.current != null && Keyboard.current.spaceKey.wasPressedThisFrame;
 #else
@@ -198,6 +200,7 @@ namespace Nerv.Client
         {
             get
             {
+                if (UI.NervUI.IsTyping) return false;
 #if ENABLE_INPUT_SYSTEM
                 return Keyboard.current != null && Keyboard.current.vKey.wasPressedThisFrame;
 #else
@@ -206,10 +209,25 @@ namespace Nerv.Client
             }
         }
 
+        /// <summary>Клавиша J — журнал опыта.</summary>
+        public static bool JournalPressed
+        {
+            get
+            {
+                if (UI.NervUI.IsTyping) return false;
+#if ENABLE_INPUT_SYSTEM
+                return Keyboard.current != null && Keyboard.current.jKey.wasPressedThisFrame;
+#else
+                return Input.GetKeyDown(KeyCode.J);
+#endif
+            }
+        }
+
         public static bool TablePressed
         {
             get
             {
+                if (UI.NervUI.IsTyping) return false;
 #if ENABLE_INPUT_SYSTEM
                 return Keyboard.current != null && Keyboard.current.tKey.wasPressedThisFrame;
 #else

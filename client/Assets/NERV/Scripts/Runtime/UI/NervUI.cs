@@ -382,6 +382,38 @@ namespace Nerv.Client.UI
         public static Color WithAlpha(Color c, float a) => new Color(c.r, c.g, c.b, a);
 
         /// <summary>Число с запятой, как принято в русском тексте: 15,999.</summary>
+        /// <summary>Идёт ввод текста: горячие клавиши (T, V, цифры, пробел, Cmd+Z) в это время не срабатывают.</summary>
+        public static bool IsTyping
+        {
+            get
+            {
+                GameObject go = EventSystem.current != null ? EventSystem.current.currentSelectedGameObject : null;
+                InputField f = go != null ? go.GetComponent<InputField>() : null;
+                return f != null && f.isFocused;
+            }
+        }
+
+        /// <summary>Поле ввода в стиле Mendal: тёмная подложка, рамка, подсказка-заполнитель.</summary>
+        public static InputField TextInput(Transform parent, string placeholder, int fontSize = 15, string name = "Input")
+        {
+            Image bg = Box(parent, name, new Color32(8, 12, 22, 255), 10);
+            Border(bg.transform, new Color(1, 1, 1, 0.14f), 10);
+            Size(bg, -1, 44);
+            Text text = Label(bg.transform, "", Regular, fontSize, Text, TextAnchor.MiddleLeft, "Text");
+            Stretch(text.rectTransform, 12);
+            text.supportRichText = false;
+            Text ph = Label(bg.transform, placeholder, Regular, fontSize, Dim, TextAnchor.MiddleLeft, "Placeholder");
+            Stretch(ph.rectTransform, 12);
+            InputField f = bg.gameObject.AddComponent<InputField>();
+            f.textComponent = text;
+            f.placeholder = ph;
+            f.targetGraphic = bg;
+            f.lineType = InputField.LineType.SingleLine;
+            f.caretColor = Energy;
+            f.selectionColor = WithAlpha(Energy, 0.35f);
+            return f;
+        }
+
         /// <summary>Температура в двух шкалах: «298 K · 25 °C» (школьникам привычнее Цельсий, химикам — Кельвин).</summary>
         public static string Kelvin(double k)
         {

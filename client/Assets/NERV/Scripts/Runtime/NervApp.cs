@@ -39,6 +39,8 @@ namespace Nerv.Client
         public string SceneName { get; private set; } = "";
         /// <summary>Режим «Лаборатория»: графики и измерения поверх той же песочницы.</summary>
         public bool LabMode { get; set; }
+        /// <summary>Текущая сцена (готовая или загруженная из файла) — для заголовка и подсказки.</summary>
+        public NervScenes.Preset CurrentPreset { get; private set; }
 
         private void Awake()
         {
@@ -55,6 +57,8 @@ namespace Nerv.Client
             gameObject.AddComponent<UI.MoleculeCardPanel>();
             gameObject.AddComponent<UI.LabPanel>();
             gameObject.AddComponent<NervReplay>();
+            gameObject.AddComponent<NervSaves>();
+            gameObject.AddComponent<UI.ExperimentLogPanel>();
             gameObject.AddComponent<NervHud>();
             NervEnvironment.MainCamera.gameObject.AddComponent<NervCameraController>();
 
@@ -101,9 +105,25 @@ namespace Nerv.Client
 
             Host = new SimulationHost(sim);
             SceneName = preset.Name;
+            CurrentPreset = preset;
             NervHistory.Instance?.Clear();
             // Фоновый поток там, где он есть (на WebGL — ручной режим через Advance в Update).
             if (Application.platform != RuntimePlatform.WebGLPlayer) Host.Start();
+        }
+
+        /// <summary>Загрузить сохранённую сцену: свежая симуляция с настройками из файла и восстановленным миром.</summary>
+        public void LoadSaved(SceneData d)
+        {
+            Temperature = d.Temperature;
+            var preset = new NervScenes.Preset
+            {
+                Name = string.IsNullOrEmpty(d.Name) ? "Моя сцена" : d.Name,
+                Hint = "Сохранённая сцена. Всё как было в момент сохранения: атомы, связи, скорости, температура и среда.",
+                BoxHalfSize = d.BoxHalfSize > 0 ? (float)d.BoxHalfSize : 12f,
+                Medium = d.Medium,
+                Build = sim => sim.Apply(new RestoreState(d.State)),
+            };
+            LoadScene(preset);
         }
 
         // ================= Команды =================
