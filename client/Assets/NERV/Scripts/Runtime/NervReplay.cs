@@ -173,8 +173,8 @@ namespace Nerv.Client
                 if (!_playing) return;
                 _cursor = v * Duration;
             });
-            ((RectTransform)_scrub.transform).anchorMin = Vector2.zero;
-            ((RectTransform)_scrub.transform).anchorMax = Vector2.one;
+            // Без раскладки у корня слайдера остаётся размер по умолчанию 100×100 — растягиваем ровно по хосту.
+            UI.NervUI.Stretch((RectTransform)_scrub.transform);
             _time = UI.NervUI.Label(panel.transform, "", UI.NervUI.Mono, 12, UI.NervUI.TextSoft, TextAnchor.MiddleCenter);
             UI.NervUI.Place(_time.rectTransform, 322, 6, 92, 40);
             _close = UI.NervUI.Button(panel.transform, "×", UI.NervUI.ButtonStyle.Ghost, () => Stop(NervApp.Instance), 18, 8);
