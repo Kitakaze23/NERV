@@ -35,5 +35,16 @@ namespace Nerv.Core.Data
             string key = string.CompareOrdinal(x, y) <= 0 ? x + "-" + y + order : y + "-" + x + order;
             return Table.TryGetValue(key, out double e) ? e : fallbackPerOrder * order;
         }
+
+        /// <summary>
+        /// Энергия связи с учётом того, во что она может достроиться: если у обоих атомов есть свободные валентности,
+        /// одинарная O–O у «недособранного» O₂ скоро станет двойной — это не слабое место, а молекула в процессе сборки.
+        /// </summary>
+        internal static double PotentialEnergy(Model.World w, Model.Bond b)
+        {
+            int fa = w.GetFreeValence(b.A), fb = w.GetFreeValence(b.B);
+            int order = System.Math.Min(3, b.Order + System.Math.Min(fa, fb));
+            return Get(w.GetElement(b.A), w.GetElement(b.B), order);
+        }
     }
 }

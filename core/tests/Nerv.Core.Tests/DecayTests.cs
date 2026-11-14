@@ -79,7 +79,7 @@ namespace Nerv.Core.Tests
         [Test]
         public static void Decay_StableAndRadicalsStay()
         {
-            foreach (string s in new[] { "OO", "NN", "[O]O", "O" })
+            foreach (string s in new[] { "OO", "NN", "[O]O", "O", "[O][O]", "[N][N]" })
             {
                 Simulation sim = Lone(s, 300, 3);
                 Assert.True(!sim.World.Molecules.Single().Unstable, s + " не помечен неустойчивым");

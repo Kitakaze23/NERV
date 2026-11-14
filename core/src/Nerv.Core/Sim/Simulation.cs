@@ -623,7 +623,7 @@ namespace Nerv.Core.Sim
                 foreach (Bond b in w.Bonds)
                 {
                     if (!b.IsFormed || !inMol.Contains(b.A)) continue;
-                    double e = BondEnergies.Get(w.Elements[b.Ia], w.Elements[b.Ib], b.Order);
+                    double e = BondEnergies.PotentialEnergy(w, b);
                     if (e < we) { we = e; weakest = b; }
                 }
                 if (weakest == null) continue;

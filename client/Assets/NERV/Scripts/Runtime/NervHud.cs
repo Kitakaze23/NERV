@@ -105,7 +105,7 @@ namespace Nerv.Client
                 if (e.Type == SimEventType.MoleculeIdentified && e.Text != null && !e.Text.StartsWith("Атомарный"))
                     AddJournal(e.Text, "опознано", NervUI.Energy);
                 else if (e.Type == SimEventType.MoleculeDecayed && e.Text != null)
-                    AddJournal(NervDirector.Pretty(e.Text, 0) + " распалось", "неустойчиво · распад по слабой связи", NervUI.Heat);
+                    AddJournal(NervDirector.Pretty(e.Text, 0) + " распалось", "распад · слабая связь", NervUI.Heat);
             foreach (ReactionRecord r in app.Reactions)
             {
                 string kind = StepTitle(r.Reaction.Name).ToLowerInvariant() + (r.Reaction.DeltaHKj < 0 ? " · экзо" : r.Reaction.DeltaHKj > 0 ? " · эндо" : "");

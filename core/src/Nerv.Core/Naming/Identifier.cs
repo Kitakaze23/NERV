@@ -81,7 +81,7 @@ namespace Nerv.Core.Naming
             foreach (Bond b in w.Bonds)
             {
                 if (!b.IsFormed || !inMol.Contains(b.A)) continue;
-                double e = BondEnergies.Get(w.GetElement(b.A), w.GetElement(b.B), b.Order);
+                double e = BondEnergies.PotentialEnergy(w, b);
                 if (e < weakest) weakest = e;
             }
             if (weakest < WeakBondEnergy)
