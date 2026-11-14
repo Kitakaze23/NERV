@@ -55,6 +55,14 @@ namespace Nerv.Core.Data
             ["Na"] = D("Натрий", "Sodium", 22.990, 0.93, 1, 1.66, 2.27, 0xAB5CF2, ElementAvailability.Enabled),
             ["S"] = D("Сера", "Sulfur", 32.06, 2.58, 6, 1.05, 1.80, 0xF2D33A, ElementAvailability.Optional),
             ["Cl"] = D("Хлор", "Chlorine", 35.45, 3.16, 7, 1.02, 1.75, 0x3DDC5A, ElementAvailability.Enabled),
+            // Второй набор: щелочные и щёлочноземельные металлы, тяжёлые галогены, фосфор.
+            ["Li"] = D("Литий", "Lithium", 6.94, 0.98, 1, 1.28, 1.82, 0xD08CFF, ElementAvailability.Enabled),
+            ["K"] = D("Калий", "Potassium", 39.098, 0.82, 1, 2.03, 2.75, 0x8F4FE0, ElementAvailability.Enabled),
+            ["Mg"] = D("Магний", "Magnesium", 24.305, 1.31, 2, 1.41, 1.73, 0x8AFF3A, ElementAvailability.Enabled),
+            ["Ca"] = D("Кальций", "Calcium", 40.078, 1.00, 2, 1.76, 2.31, 0x4FE08A, ElementAvailability.Enabled),
+            ["Br"] = D("Бром", "Bromine", 79.904, 2.96, 7, 1.20, 1.85, 0xC8503A, ElementAvailability.Enabled),
+            ["I"] = D("Иод", "Iodine", 126.904, 2.66, 7, 1.39, 1.98, 0xB04CC8, ElementAvailability.Enabled),
+            ["P"] = D("Фосфор", "Phosphorus", 30.974, 2.19, 5, 1.07, 1.80, 0xFF8C1A, ElementAvailability.Enabled),
         };
 
         private static Detail D(string ru, string en, double mass, double en2, int valence, double cov, double vdw, uint color, ElementAvailability a) =>

@@ -103,9 +103,78 @@ namespace Nerv.Client
                     Atom(sim, "Na", -1.5, -2.5, 0, +1);
                 }
             },
+            new Preset
+            {
+                Name = "Металлы и вода",
+                Hint = "Литий, натрий и калий рядом с водой. Калий реагирует быстрее всех — следи, где первым появится водород H₂.",
+                BoxHalfSize = 6f,
+                Build = sim =>
+                {
+                    int k = 0;
+                    foreach (string m in new[] { "[Li]", "[Li]", "[Na]", "[Na]", "[K]", "[K]" }) Mol(sim, m, Grid(k++));
+                    for (int i = 0; i < 12; i++) Mol(sim, "O", Grid(k++));
+                }
+            },
+            new Preset
+            {
+                Name = "Горение магния",
+                Hint = "Магний на воздухе сам не горит. Подожги «Искрой» или «Нагревом» — вспыхнет ослепительно, останется белый оксид магния MgO.",
+                BoxHalfSize = 6f,
+                Build = sim =>
+                {
+                    int k = 0;
+                    for (int i = 0; i < 8; i++) Mol(sim, "[Mg]", Grid(k++));
+                    for (int i = 0; i < 6; i++) Mol(sim, "O=O", Grid(k++));
+                }
+            },
+            new Preset
+            {
+                Name = "Хлор и водород",
+                Hint = "В темноте смесь спокойна. «Искра» — как вспышка света: разбивает Cl₂ на атомы, и цепь превращает смесь в хлороводород HCl.",
+                BoxHalfSize = 6f,
+                Build = sim =>
+                {
+                    int k = 0;
+                    for (int i = 0; i < 6; i++)
+                    {
+                        Mol(sim, "[H][H]", Grid(k++));
+                        Mol(sim, "ClCl", Grid(k++));
+                    }
+                }
+            },
+            new Preset
+            {
+                Name = "Хлорирование метана",
+                Hint = "«Искра» запускает цепь: хлор по одному заменяет атомы водорода в метане — CH₃Cl, CH₂Cl₂, CHCl₃ и даже CCl₄.",
+                BoxHalfSize = 6f,
+                Build = sim =>
+                {
+                    int k = 0;
+                    for (int i = 0; i < 4; i++) Mol(sim, "C", Grid(k++));
+                    for (int i = 0; i < 10; i++) Mol(sim, "ClCl", Grid(k++));
+                }
+            },
+            new Preset
+            {
+                Name = "Калий и бром",
+                Hint = "Калий отдаёт свой электрон брому — получается бромид калия KBr. Сравни с натрием и хлором.",
+                BoxHalfSize = 6f,
+                Build = sim =>
+                {
+                    int k = 0;
+                    for (int i = 0; i < 4; i++) Mol(sim, "[K]", Grid(k++));
+                    for (int i = 0; i < 2; i++) Mol(sim, "BrBr", Grid(k++));
+                }
+            },
         };
 
         // ================= Строительные блоки =================
+
+        /// <summary>Узел сетки 4×4×2 с шагом 3 Å: так сцены второго набора плотные, как «Гремучий газ».</summary>
+        public static Vec3 Grid(int k) => new Vec3(-4.5 + 3 * (k % 4), -4.5 + 3 * (k / 4 % 4), -1.75 + 3.5 * (k / 16 % 2));
+
+        /// <summary>Молекула по SMILES (ядро само собирает геометрию и отодвигает, если тесно).</summary>
+        public static void Mol(Simulation sim, string smiles, Vec3 at) => sim.Apply(new BuildMolecule(smiles, at));
 
         public static AtomId Atom(Simulation sim, string symbol, double x, double y, double z, int charge = 0) =>
             sim.Apply(new AddAtom(symbol, new Vec3(x, y, z), charge)).Result;

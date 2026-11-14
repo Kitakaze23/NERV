@@ -30,7 +30,7 @@ namespace Nerv.Core.Tests
                     nb[b.A].Add(b.B);
                     nb[b.B].Add(b.A);
                     double d = Vec3.Distance(t.Positions[b.A], t.Positions[b.B]);
-                    Assert.True(d > 0.6 && d < 2.3, c.Smiles + ": длина связи " + d.ToString("F2"));
+                    Assert.True(d > 0.6 && d < 3.0, c.Smiles + ": длина связи " + d.ToString("F2"));
                 }
                 // Несвязанные атомы (не 1-2 и не 1-3) не должны налезать друг на друга.
                 for (int i = 0; i < t.AtomCount; i++)
@@ -38,6 +38,7 @@ namespace Nerv.Core.Tests
                     {
                         if (bonded.Contains((i, j))) continue;
                         if (nb[i].Intersect(nb[j]).Any()) continue;
+                        if (t.Charges[i] * t.Charges[j] < 0) continue; // ионная пара (Li⁺…H⁻ ≈ 1,6 Å) — это контакт, а не налезание
                         double d = Vec3.Distance(t.Positions[i], t.Positions[j]);
                         Assert.True(d > 1.6, c.Smiles + ": атомы " + i + " и " + j + " слишком близко (" + d.ToString("F2") + ")");
                     }

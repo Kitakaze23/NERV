@@ -647,3 +647,634 @@
     textRu: "Ион водорода из кислоты встречает гидроксид-ион из щёлочи — получается вода. Это суть любой реакции нейтрализации, например HCl + NaOH → NaCl + H₂O."
     level: school
   tags: [нейтрализация, экзотермическая]
+
+# ---------- Щелочные металлы и вода: 2M + 2H₂O → 2MOH + H₂ ----------
+
+- id: li_water
+  group: li_water
+  name: Литий и вода
+  smarts: "[Li;D0:1].[H:2][O;D2:3][H:4]>>[Li+:1].[H:2].[O-:3][H:4]"
+  activationEnergy: 16
+  deltaH: -222
+  rate: 0.3
+  conditions:
+    medium: [vacuum, water]
+  effects: ionic_flash
+  education:
+    summary: "2Li + 2H₂O → 2LiOH + H₂"
+    textRu: "Литий реагирует с водой спокойнее всех щелочных металлов: отдаёт электрон, от воды отрывается атом водорода, остаётся гидроксид-ион."
+    level: school
+    mechanism: simplified
+  tags: [щелочной металл, вода, экзотермическая, водород]
+
+- id: na_water
+  group: na_water
+  name: Натрий и вода
+  smarts: "[Na;D0:1].[H:2][O;D2:3][H:4]>>[Na+:1].[H:2].[O-:3][H:4]"
+  activationEnergy: 8
+  deltaH: -184
+  rate: 0.3
+  conditions:
+    medium: [vacuum, water]
+  effects: ionic_flash
+  education:
+    summary: "2Na + 2H₂O → 2NaOH + H₂"
+    textRu: "Натрий отдаёт электрон молекуле воды: она распадается на гидроксид-ион и атом водорода. Атомы водорода соединяются в H₂ — тот самый газ, который шипит и может вспыхнуть."
+    level: school
+    mechanism: simplified
+  tags: [щелочной металл, вода, экзотермическая, водород]
+
+- id: k_water
+  group: k_water
+  name: Калий и вода
+  smarts: "[K;D0:1].[H:2][O;D2:3][H:4]>>[K+:1].[H:2].[O-:3][H:4]"
+  activationEnergy: 3
+  deltaH: -196
+  rate: 0.3
+  conditions:
+    medium: [vacuum, water]
+  effects: ionic_flash
+  education:
+    summary: "2K + 2H₂O → 2KOH + H₂"
+    textRu: "Калий отдаёт электрон охотнее натрия — реакция идёт почти мгновенно. В настоящем опыте выделившийся водород загорается сиреневым пламенем."
+    level: school
+    mechanism: simplified
+  tags: [щелочной металл, вода, экзотермическая, водород]
+
+
+# ---------- Щелочные металлы и галогены: 2M + X₂ → 2MX ----------
+
+- id: li_cl2_1
+  group: li_cl2
+  name: Литий и хлор — шаг 1
+  smarts: "[Li;D0:1].[Cl:2][Cl:3]>>[Li+:1].[Cl-:2].[Cl:3]"
+  activationEnergy: 8
+  deltaH: -288
+  rate: 0.3
+  conditions:
+    medium: [vacuum]
+  effects: ionic_flash
+  education:
+    summary: "2Li + Cl₂ → 2LiCl"
+    textRu: "Литий отдаёт свой единственный внешний электрон молекуле Cl₂: получаются ионы Li⁺ и Cl⁻, второй атом галогена освобождается."
+    level: school
+    mechanism: simplified
+  tags: [ионная связь, экзотермическая]
+
+- id: li_cl2_2
+  group: li_cl2
+  name: Литий и хлор — шаг 2
+  smarts: "[Li;D0:1].[Cl;D0:2]>>[Li+:1].[Cl-:2]"
+  activationEnergy: 0
+  deltaH: -530
+  rate: 0.5
+  conditions:
+    medium: [vacuum]
+  effects: ionic_flash
+  education:
+    summary: "2Li + Cl₂ → 2LiCl"
+    textRu: "Свободный атом галогена забирает электрон у второго атома металла. Ионы притягиваются — получается хлорид лития."
+    level: school
+    mechanism: simplified
+  tags: [ионная связь, экзотермическая]
+
+- id: li_br2_1
+  group: li_br2
+  name: Литий и бром — шаг 1
+  smarts: "[Li;D0:1].[Br:2][Br:3]>>[Li+:1].[Br-:2].[Br:3]"
+  activationEnergy: 11
+  deltaH: -254
+  rate: 0.3
+  conditions:
+    medium: [vacuum]
+  effects: ionic_flash
+  education:
+    summary: "2Li + Br₂ → 2LiBr"
+    textRu: "Литий отдаёт свой единственный внешний электрон молекуле Br₂: получаются ионы Li⁺ и Br⁻, второй атом галогена освобождается."
+    level: school
+    mechanism: simplified
+  tags: [ионная связь, экзотермическая]
+
+- id: li_br2_2
+  group: li_br2
+  name: Литий и бром — шаг 2
+  smarts: "[Li;D0:1].[Br;D0:2]>>[Li+:1].[Br-:2]"
+  activationEnergy: 0
+  deltaH: -448
+  rate: 0.5
+  conditions:
+    medium: [vacuum]
+  effects: ionic_flash
+  education:
+    summary: "2Li + Br₂ → 2LiBr"
+    textRu: "Свободный атом галогена забирает электрон у второго атома металла. Ионы притягиваются — получается бромид лития."
+    level: school
+    mechanism: simplified
+  tags: [ионная связь, экзотермическая]
+
+- id: li_i2_1
+  group: li_i2
+  name: Литий и иод — шаг 1
+  smarts: "[Li;D0:1].[I:2][I:3]>>[Li+:1].[I-:2].[I:3]"
+  activationEnergy: 15
+  deltaH: -194
+  rate: 0.3
+  conditions:
+    medium: [vacuum]
+  effects: ionic_flash
+  education:
+    summary: "2Li + I₂ → 2LiI"
+    textRu: "Литий отдаёт свой единственный внешний электрон молекуле I₂: получаются ионы Li⁺ и I⁻, второй атом галогена освобождается."
+    level: school
+    mechanism: simplified
+  tags: [ионная связь, экзотермическая]
+
+- id: li_i2_2
+  group: li_i2
+  name: Литий и иод — шаг 2
+  smarts: "[Li;D0:1].[I;D0:2]>>[Li+:1].[I-:2]"
+  activationEnergy: 0
+  deltaH: -346
+  rate: 0.5
+  conditions:
+    medium: [vacuum]
+  effects: ionic_flash
+  education:
+    summary: "2Li + I₂ → 2LiI"
+    textRu: "Свободный атом галогена забирает электрон у второго атома металла. Ионы притягиваются — получается иодид лития."
+    level: school
+    mechanism: simplified
+  tags: [ионная связь, экзотермическая]
+
+- id: na_br2_1
+  group: na_br2
+  name: Натрий и бром — шаг 1
+  smarts: "[Na;D0:1].[Br:2][Br:3]>>[Na+:1].[Br-:2].[Br:3]"
+  activationEnergy: 8
+  deltaH: -264
+  rate: 0.3
+  conditions:
+    medium: [vacuum]
+  effects: ionic_flash
+  education:
+    summary: "2Na + Br₂ → 2NaBr"
+    textRu: "Натрий отдаёт свой единственный внешний электрон молекуле Br₂: получаются ионы Na⁺ и Br⁻, второй атом галогена освобождается."
+    level: school
+    mechanism: simplified
+  tags: [ионная связь, экзотермическая]
+
+- id: na_br2_2
+  group: na_br2
+  name: Натрий и бром — шаг 2
+  smarts: "[Na;D0:1].[Br;D0:2]>>[Na+:1].[Br-:2]"
+  activationEnergy: 0
+  deltaH: -458
+  rate: 0.5
+  conditions:
+    medium: [vacuum]
+  effects: ionic_flash
+  education:
+    summary: "2Na + Br₂ → 2NaBr"
+    textRu: "Свободный атом галогена забирает электрон у второго атома металла. Ионы притягиваются — получается бромид натрия."
+    level: school
+    mechanism: simplified
+  tags: [ионная связь, экзотермическая]
+
+- id: na_i2_1
+  group: na_i2
+  name: Натрий и иод — шаг 1
+  smarts: "[Na;D0:1].[I:2][I:3]>>[Na+:1].[I-:2].[I:3]"
+  activationEnergy: 12
+  deltaH: -212
+  rate: 0.3
+  conditions:
+    medium: [vacuum]
+  effects: ionic_flash
+  education:
+    summary: "2Na + I₂ → 2NaI"
+    textRu: "Натрий отдаёт свой единственный внешний электрон молекуле I₂: получаются ионы Na⁺ и I⁻, второй атом галогена освобождается."
+    level: school
+    mechanism: simplified
+  tags: [ионная связь, экзотермическая]
+
+- id: na_i2_2
+  group: na_i2
+  name: Натрий и иод — шаг 2
+  smarts: "[Na;D0:1].[I;D0:2]>>[Na+:1].[I-:2]"
+  activationEnergy: 0
+  deltaH: -364
+  rate: 0.5
+  conditions:
+    medium: [vacuum]
+  effects: ionic_flash
+  education:
+    summary: "2Na + I₂ → 2NaI"
+    textRu: "Свободный атом галогена забирает электрон у второго атома металла. Ионы притягиваются — получается иодид натрия."
+    level: school
+    mechanism: simplified
+  tags: [ионная связь, экзотермическая]
+
+- id: k_cl2_1
+  group: k_cl2
+  name: Калий и хлор — шаг 1
+  smarts: "[K;D0:1].[Cl:2][Cl:3]>>[K+:1].[Cl-:2].[Cl:3]"
+  activationEnergy: 3
+  deltaH: -316
+  rate: 0.3
+  conditions:
+    medium: [vacuum]
+  effects: ionic_flash
+  education:
+    summary: "2K + Cl₂ → 2KCl"
+    textRu: "Калий отдаёт свой единственный внешний электрон молекуле Cl₂: получаются ионы K⁺ и Cl⁻, второй атом галогена освобождается."
+    level: school
+    mechanism: simplified
+  tags: [ионная связь, экзотермическая]
+
+- id: k_cl2_2
+  group: k_cl2
+  name: Калий и хлор — шаг 2
+  smarts: "[K;D0:1].[Cl;D0:2]>>[K+:1].[Cl-:2]"
+  activationEnergy: 0
+  deltaH: -558
+  rate: 0.5
+  conditions:
+    medium: [vacuum]
+  effects: ionic_flash
+  education:
+    summary: "2K + Cl₂ → 2KCl"
+    textRu: "Свободный атом галогена забирает электрон у второго атома металла. Ионы притягиваются — получается хлорид калия."
+    level: school
+    mechanism: simplified
+  tags: [ионная связь, экзотермическая]
+
+- id: k_br2_1
+  group: k_br2
+  name: Калий и бром — шаг 1
+  smarts: "[K;D0:1].[Br:2][Br:3]>>[K+:1].[Br-:2].[Br:3]"
+  activationEnergy: 6
+  deltaH: -297
+  rate: 0.3
+  conditions:
+    medium: [vacuum]
+  effects: ionic_flash
+  education:
+    summary: "2K + Br₂ → 2KBr"
+    textRu: "Калий отдаёт свой единственный внешний электрон молекуле Br₂: получаются ионы K⁺ и Br⁻, второй атом галогена освобождается."
+    level: school
+    mechanism: simplified
+  tags: [ионная связь, экзотермическая]
+
+- id: k_br2_2
+  group: k_br2
+  name: Калий и бром — шаг 2
+  smarts: "[K;D0:1].[Br;D0:2]>>[K+:1].[Br-:2]"
+  activationEnergy: 0
+  deltaH: -491
+  rate: 0.5
+  conditions:
+    medium: [vacuum]
+  effects: ionic_flash
+  education:
+    summary: "2K + Br₂ → 2KBr"
+    textRu: "Свободный атом галогена забирает электрон у второго атома металла. Ионы притягиваются — получается бромид калия."
+    level: school
+    mechanism: simplified
+  tags: [ионная связь, экзотермическая]
+
+- id: k_i2_1
+  group: k_i2
+  name: Калий и иод — шаг 1
+  smarts: "[K;D0:1].[I:2][I:3]>>[K+:1].[I-:2].[I:3]"
+  activationEnergy: 10
+  deltaH: -252
+  rate: 0.3
+  conditions:
+    medium: [vacuum]
+  effects: ionic_flash
+  education:
+    summary: "2K + I₂ → 2KI"
+    textRu: "Калий отдаёт свой единственный внешний электрон молекуле I₂: получаются ионы K⁺ и I⁻, второй атом галогена освобождается."
+    level: school
+    mechanism: simplified
+  tags: [ионная связь, экзотермическая]
+
+- id: k_i2_2
+  group: k_i2
+  name: Калий и иод — шаг 2
+  smarts: "[K;D0:1].[I;D0:2]>>[K+:1].[I-:2]"
+  activationEnergy: 0
+  deltaH: -404
+  rate: 0.5
+  conditions:
+    medium: [vacuum]
+  effects: ionic_flash
+  education:
+    summary: "2K + I₂ → 2KI"
+    textRu: "Свободный атом галогена забирает электрон у второго атома металла. Ионы притягиваются — получается иодид калия."
+    level: school
+    mechanism: simplified
+  tags: [ионная связь, экзотермическая]
+
+
+# ---------- Магний и кальций: горение и хлор ----------
+
+- id: mg_o2_1
+  group: mg_o2
+  name: Горение: магний — шаг 1
+  smarts: "[Mg;D0:1].[O:2]=[O:3]>>[Mg+2:1].[O-2:2].[O:3]"
+  activationEnergy: 70
+  deltaH: -352
+  rate: 0.3
+  conditions:
+    medium: [vacuum]
+  effects: combustion_flash
+  education:
+    summary: "2Mg + O₂ → 2MgO"
+    textRu: "Магний отдаёт оба внешних электрона атому кислорода из O₂. Чтобы начать, нужен нагрев или искра — дальше металл горит сам ослепительно белым пламенем."
+    level: school
+    mechanism: simplified
+  tags: [горение, ионная связь, экзотермическая]
+
+- id: mg_o2_2
+  group: mg_o2
+  name: Горение: магний — шаг 2
+  smarts: "[Mg;D0:1].[O;D0:2]>>[Mg+2:1].[O-2:2]"
+  activationEnergy: 5
+  deltaH: -850
+  rate: 0.5
+  conditions:
+    medium: [vacuum]
+  effects: combustion_flash
+  education:
+    summary: "2Mg + O₂ → 2MgO"
+    textRu: "Свободный атом кислорода забирает два электрона у следующего атома металла. Получается оксид магния — белый порошок."
+    level: school
+    mechanism: simplified
+  tags: [горение, ионная связь, экзотермическая]
+
+- id: mg_cl2
+  group: mg_cl2
+  name: Магний и хлор
+  smarts: "[Mg;D0:1].[Cl:2][Cl:3]>>[Mg+2:1].[Cl-:2].[Cl-:3]"
+  activationEnergy: 10
+  deltaH: -641
+  rate: 0.3
+  conditions:
+    medium: [vacuum]
+  effects: ionic_flash
+  education:
+    summary: "Mg + Cl₂ → MgCl₂"
+    textRu: "Магний отдаёт два электрона — по одному каждому атому хлора. Получается хлорид магния: один ион Mg²⁺ на два иона Cl⁻."
+    level: school
+    mechanism: simplified
+  tags: [ионная связь, экзотермическая]
+
+- id: ca_o2_1
+  group: ca_o2
+  name: Горение: кальций — шаг 1
+  smarts: "[Ca;D0:1].[O:2]=[O:3]>>[Ca+2:1].[O-2:2].[O:3]"
+  activationEnergy: 60
+  deltaH: -386
+  rate: 0.3
+  conditions:
+    medium: [vacuum]
+  effects: combustion_flash
+  education:
+    summary: "2Ca + O₂ → 2CaO"
+    textRu: "Кальций отдаёт оба внешних электрона атому кислорода из O₂. Чтобы начать, нужен нагрев или искра — дальше металл горит сам ослепительно белым пламенем."
+    level: school
+    mechanism: simplified
+  tags: [горение, ионная связь, экзотермическая]
+
+- id: ca_o2_2
+  group: ca_o2
+  name: Горение: кальций — шаг 2
+  smarts: "[Ca;D0:1].[O;D0:2]>>[Ca+2:1].[O-2:2]"
+  activationEnergy: 5
+  deltaH: -884
+  rate: 0.5
+  conditions:
+    medium: [vacuum]
+  effects: combustion_flash
+  education:
+    summary: "2Ca + O₂ → 2CaO"
+    textRu: "Свободный атом кислорода забирает два электрона у следующего атома металла. Получается оксид кальция — белый порошок."
+    level: school
+    mechanism: simplified
+  tags: [горение, ионная связь, экзотермическая]
+
+- id: ca_cl2
+  group: ca_cl2
+  name: Кальций и хлор
+  smarts: "[Ca;D0:1].[Cl:2][Cl:3]>>[Ca+2:1].[Cl-:2].[Cl-:3]"
+  activationEnergy: 10
+  deltaH: -796
+  rate: 0.3
+  conditions:
+    medium: [vacuum]
+  effects: ionic_flash
+  education:
+    summary: "Ca + Cl₂ → CaCl₂"
+    textRu: "Кальций отдаёт два электрона — по одному каждому атому хлора. Получается хлорид кальция: один ион Ca²⁺ на два иона Cl⁻."
+    level: school
+    mechanism: simplified
+  tags: [ионная связь, экзотермическая]
+
+
+# ---------- Галогены и водород: H₂ + X₂ → 2HX (цепь) ----------
+
+- id: h2_cl2_1
+  group: h2_cl2
+  name: Водород и хлор — атом галогена
+  smarts: "[Cl;D0:1].[H:2][H:3]>>[Cl:1][H:2].[H:3]"
+  activationEnergy: 6
+  deltaH: 4
+  rate: 0.4
+  conditions:
+    medium: [vacuum]
+  effects: combustion_flash
+  education:
+    summary: "H₂ + Cl₂ → 2HCl"
+    textRu: "Атом хлора отрывает водород от H₂ — получается HCl и свободный атом водорода. Цепь запускает свет или искра: они разбивают Cl₂ на атомы. На солнце смесь хлора с водородом взрывается."
+    level: school
+    mechanism: chain
+  tags: [цепная, радикалы, галоген]
+
+- id: h2_cl2_2
+  group: h2_cl2
+  name: Водород и хлор — атом водорода
+  smarts: "[H;D0:1].[Cl:2][Cl:3]>>[H:1][Cl:2].[Cl:3]"
+  activationEnergy: 3
+  deltaH: -189
+  rate: 0.5
+  conditions:
+    medium: [vacuum]
+  effects: combustion_flash
+  education:
+    summary: "H₂ + Cl₂ → 2HCl"
+    textRu: "Атом водорода выбивает атом галогена из Cl₂ — снова получается HCl и новый атом галогена. Так цепь бежит дальше."
+    level: school
+    mechanism: chain
+  tags: [цепная, радикалы, галоген, экзотермическая]
+
+- id: h2_br2_1
+  group: h2_br2
+  name: Водород и бром — атом галогена
+  smarts: "[Br;D0:1].[H:2][H:3]>>[Br:1][H:2].[H:3]"
+  activationEnergy: 60
+  deltaH: 70
+  rate: 0.4
+  conditions:
+    medium: [vacuum]
+  effects: combustion_flash
+  education:
+    summary: "H₂ + Br₂ → 2HBr"
+    textRu: "Атом брома отрывает водород от H₂ гораздо неохотнее хлора: шаг поглощает тепло, поэтому смесь брома с водородом реагирует только при нагреве."
+    level: school
+    mechanism: chain
+  tags: [цепная, радикалы, галоген]
+
+- id: h2_br2_2
+  group: h2_br2
+  name: Водород и бром — атом водорода
+  smarts: "[H;D0:1].[Br:2][Br:3]>>[H:1][Br:2].[Br:3]"
+  activationEnergy: 3
+  deltaH: -173
+  rate: 0.5
+  conditions:
+    medium: [vacuum]
+  effects: combustion_flash
+  education:
+    summary: "H₂ + Br₂ → 2HBr"
+    textRu: "Атом водорода выбивает атом галогена из Br₂ — снова получается HBr и новый атом галогена. Так цепь бежит дальше."
+    level: school
+    mechanism: chain
+  tags: [цепная, радикалы, галоген, экзотермическая]
+
+
+# ---------- Галогенирование алканов: CH₄ + X₂ → CH₃X + HX (цепь) ----------
+
+- id: ch4_cl2_1
+  group: ch4_cl2
+  name: Галогенирование: атом галогена отрывает водород
+  smarts: "[Cl;D0:1].[C:2][H:3]>>[Cl:1][H:3].[C:2]"
+  activationEnergy: 10
+  deltaH: 8
+  rate: 0.4
+  conditions:
+    medium: [vacuum]
+  effects: combustion_flash
+  education:
+    summary: "CH₄ + Cl₂ → CH₃Cl + HCl"
+    textRu: "Атом хлора отрывает водород от углерода: получается HCl и углеродный радикал. Хлор не разборчив — по очереди заменяет все атомы водорода, вплоть до CCl₄."
+    level: school
+    mechanism: chain
+  tags: [цепная, радикалы, замещение, галоген]
+
+- id: ch4_cl2_2
+  group: ch4_cl2
+  name: Галогенирование: радикал забирает атом галогена
+  smarts: "[C:1].[Cl:2][Cl:3]>>[C:1][Cl:2].[Cl:3]"
+  activationEnergy: 4
+  deltaH: -108
+  rate: 0.5
+  conditions:
+    medium: [vacuum]
+  effects: combustion_flash
+  education:
+    summary: "CH₄ + Cl₂ → CH₃Cl + HCl"
+    textRu: "Углеродный радикал выхватывает атом из Cl₂: получается галогенпроизводное и новый атом галогена — цепь продолжается."
+    level: school
+    mechanism: chain
+  tags: [цепная, радикалы, замещение, галоген, экзотермическая]
+
+- id: ch4_br2_1
+  group: ch4_br2
+  name: Галогенирование: атом галогена отрывает водород
+  smarts: "[Br;D0:1].[C:2][H:3]>>[Br:1][H:3].[C:2]"
+  activationEnergy: 45
+  deltaH: 70
+  rate: 0.4
+  conditions:
+    medium: [vacuum]
+  effects: combustion_flash
+  education:
+    summary: "CH₄ + Br₂ → CH₃Br + HBr"
+    textRu: "Атом брома отрывает водород от углерода только при нагреве: шаг поглощает тепло. Зато бром разборчивее хлора."
+    level: school
+    mechanism: chain
+  tags: [цепная, радикалы, замещение, галоген]
+
+- id: ch4_br2_2
+  group: ch4_br2
+  name: Галогенирование: радикал забирает атом галогена
+  smarts: "[C:1].[Br:2][Br:3]>>[C:1][Br:2].[Br:3]"
+  activationEnergy: 4
+  deltaH: -95
+  rate: 0.5
+  conditions:
+    medium: [vacuum]
+  effects: combustion_flash
+  education:
+    summary: "CH₄ + Br₂ → CH₃Br + HBr"
+    textRu: "Углеродный радикал выхватывает атом из Br₂: получается галогенпроизводное и новый атом галогена — цепь продолжается."
+    level: school
+    mechanism: chain
+  tags: [цепная, радикалы, замещение, галоген, экзотермическая]
+
+
+# ---------- Кислоты в воде: HBr, HI ----------
+
+- id: hbr_dissociation
+  group: hbr_dissociation
+  name: Диссоциация бромоводорода
+  smarts: "[H:1][Br:2]>>[H+:1].[Br-:2]"
+  activationEnergy: 4
+  deltaH: -85
+  rate: 0.03
+  conditions:
+    medium: [water]
+  effects: dissolve
+  education:
+    summary: "HBr → H⁺ + Br⁻"
+    textRu: "В воде HBr полностью распадается на ионы — получается бромоводородная кислота, она даже сильнее соляной."
+    level: school
+    mechanism: simplified
+  tags: [диссоциация, кислота]
+
+- id: hi_dissociation
+  group: hi_dissociation
+  name: Диссоциация иодоводорода
+  smarts: "[H:1][I:2]>>[H+:1].[I-:2]"
+  activationEnergy: 4
+  deltaH: -81
+  rate: 0.03
+  conditions:
+    medium: [water]
+  effects: dissolve
+  education:
+    summary: "HI → H⁺ + I⁻"
+    textRu: "В воде HI полностью распадается на ионы — получается иодоводородная кислота, она даже сильнее соляной."
+    level: school
+    mechanism: simplified
+  tags: [диссоциация, кислота]
+
+# ---------- Гидрид-ион и вода: H⁻ + H₂O → H₂ + OH⁻ ----------
+
+- id: hydride_water
+  group: hydride_water
+  name: Гидрид и вода
+  smarts: "[H-;D0:1].[H:2][O;D2:3][H:4]>>[H:1][H:2].[O-:3][H:4]"
+  activationEnergy: 4
+  deltaH: -84
+  rate: 0.4
+  conditions:
+    medium: [vacuum, water]
+  effects: ionic_flash
+  education:
+    summary: "H⁻ + H₂O → H₂ + OH⁻"
+    textRu: "Гидрид-ион — водород с лишним электроном — отрывает протон от воды: получается молекула водорода и гидроксид-ион. Поэтому гидриды металлов бурно реагируют с водой."
+    level: school
+    mechanism: simplified
+  tags: [вода, водород, экзотермическая]

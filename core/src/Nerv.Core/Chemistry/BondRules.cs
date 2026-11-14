@@ -17,6 +17,9 @@ namespace Nerv.Core.Chemistry
         /// </summary>
         public static bool CanBond(World w, int i, int j)
         {
+            // Металлы не соединяются друг с другом ковалентно: металлической связи в модели нет,
+            // а «молекулы» Mg₂ или Na₂ съедали бы атомы металла, которые должны отдавать электроны.
+            if (w.Elements[i].IsMetal && w.Elements[j].IsMetal) return false;
             if (w.Elements[i].Z == Oxygen && w.Elements[j].Z == Oxygen)
                 return !HasOxygenNeighbor(w, i) && !HasOxygenNeighbor(w, j);
             return true;
