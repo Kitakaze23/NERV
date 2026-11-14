@@ -41,7 +41,7 @@ namespace Nerv.Client.UI
         private Tab _tab = Tab.Substances;
 
         private RectTransform _panel;
-        private LineChart _chart;
+        private ChartTexture _chart;
         private Text _yMax, _yMin, _xMin, _xMax, _footer;
         private RectTransform _legend;
         private readonly Dictionary<Tab, Button> _tabs = new Dictionary<Tab, Button>();
@@ -94,12 +94,13 @@ namespace Nerv.Client.UI
             RectTransform plot = NervUI.Rect(panel.transform, "Plot");
             NervUI.Place(plot, 56, 48, Width - 72, Height - 48 - 62);
             Image bg = plot.gameObject.AddComponent<Image>();
-            bg.color = new Color(1, 1, 1, 0.03f);
+            bg.color = new Color(1, 1, 1, 0.012f); // в линейном цвете даже 1–2 % белого заметны
             bg.raycastTarget = false;
             var chartGo = NervUI.Rect(plot, "Chart");
             NervUI.Stretch(chartGo, 2);
-            _chart = chartGo.gameObject.AddComponent<LineChart>();
-            _chart.raycastTarget = false;
+            RawImage raw = chartGo.gameObject.AddComponent<RawImage>();
+            raw.raycastTarget = false;
+            _chart = new ChartTexture(raw, (int)(Width - 72 - 4) * 2, (int)(Height - 48 - 62 - 4) * 2);
 
             _yMax = Axis(panel.transform, 8, 44, TextAnchor.UpperRight);
             _yMin = Axis(panel.transform, 8, Height - 62 - 14, TextAnchor.LowerRight);
@@ -389,55 +390,70 @@ namespace Nerv.Client.UI
         }
     }
 
-    /// <summary>Линейный график в uGUI: несколько рядов, толщина 2 единицы холста.</summary>
-    public sealed class LineChart : MaskableGraphic
+    /// <summary>
+    /// Линейный график, нарисованный в текстуру (двойное разрешение холста): сетка и ряды толщиной 2–3 пикселя.
+    /// Перерисовка не чаще 10 раз в секунду — данные и так приходят раз в 0,1 пс.
+    /// </summary>
+    public sealed class ChartTexture
     {
-        private List<(Color color, List<Vector2> pts)> _series = new List<(Color, List<Vector2>)>();
-        private float _x0, _x1 = 1, _y0, _y1 = 1;
+        private readonly Texture2D _tex;
+        private readonly Color32[] _px;
+        private readonly int _w, _h;
+        private float _nextDraw;
+
+        public ChartTexture(RawImage target, int width, int height)
+        {
+            _w = Mathf.Max(8, width);
+            _h = Mathf.Max(8, height);
+            _tex = new Texture2D(_w, _h, TextureFormat.RGBA32, false) { wrapMode = TextureWrapMode.Clamp, filterMode = FilterMode.Bilinear };
+            _px = new Color32[_w * _h];
+            target.texture = _tex;
+            target.color = Color.white;
+        }
 
         public void SetData(List<(Color color, List<Vector2> pts)> series, float x0, float x1, float y0, float y1)
         {
-            _series = series;
-            _x0 = x0; _x1 = x1; _y0 = y0; _y1 = Mathf.Max(y1, y0 + 1e-3f);
-            SetVerticesDirty();
-        }
-
-        protected override void OnPopulateMesh(VertexHelper vh)
-        {
-            vh.Clear();
-            UnityEngine.Rect r = rectTransform.rect;
-            // Сетка: четыре горизонтальные линии.
+            if (Time.unscaledTime < _nextDraw) return;
+            _nextDraw = Time.unscaledTime + 0.1f;
+            y1 = Mathf.Max(y1, y0 + 1e-3f);
+            System.Array.Clear(_px, 0, _px.Length);
+            var grid = new Color32(255, 255, 255, 22);
             for (int g = 0; g <= 4; g++)
             {
-                float y = r.yMin + r.height * g / 4f;
-                Segment(vh, new Vector2(r.xMin, y), new Vector2(r.xMax, y), 1f, new Color(1, 1, 1, 0.06f));
+                int y = Mathf.Clamp(Mathf.RoundToInt((_h - 1) * g / 4f), 0, _h - 1);
+                for (int x = 0; x < _w; x++) _px[y * _w + x] = grid;
             }
-            foreach ((Color color, List<Vector2> pts) in _series)
+            foreach ((Color color, List<Vector2> pts) in series)
             {
+                Color32 c = color;
+                c.a = 255;
                 Vector2? prev = null;
                 foreach (Vector2 p in pts)
                 {
-                    var q = new Vector2(r.xMin + (p.x - _x0) / (_x1 - _x0) * r.width, r.yMin + (p.y - _y0) / (_y1 - _y0) * r.height);
-                    if (prev.HasValue) Segment(vh, prev.Value, q, 2f, color);
+                    var q = new Vector2((p.x - x0) / (x1 - x0) * (_w - 1), (p.y - y0) / (y1 - y0) * (_h - 1));
+                    if (prev.HasValue) Line(prev.Value, q, c);
                     prev = q;
                 }
             }
+            _tex.SetPixels32(_px);
+            _tex.Apply(false);
         }
 
-        private static void Segment(VertexHelper vh, Vector2 a, Vector2 b, float w, Color c)
+        private void Line(Vector2 a, Vector2 b, Color32 c)
         {
-            Vector2 d = b - a;
-            if (d.sqrMagnitude < 1e-6f) return;
-            Vector2 n = new Vector2(-d.y, d.x).normalized * (w * 0.5f);
-            int i = vh.currentVertCount;
-            UIVertex v = UIVertex.simpleVert;
-            v.color = c;
-            v.position = a - n; vh.AddVert(v);
-            v.position = a + n; vh.AddVert(v);
-            v.position = b + n; vh.AddVert(v);
-            v.position = b - n; vh.AddVert(v);
-            vh.AddTriangle(i, i + 1, i + 2);
-            vh.AddTriangle(i, i + 2, i + 3);
+            int steps = Mathf.Max(1, Mathf.CeilToInt(Mathf.Max(Mathf.Abs(b.x - a.x), Mathf.Abs(b.y - a.y))));
+            for (int s = 0; s <= steps; s++)
+            {
+                Vector2 p = Vector2.Lerp(a, b, s / (float)steps);
+                int cx = Mathf.RoundToInt(p.x), cy = Mathf.RoundToInt(p.y);
+                for (int dy = -1; dy <= 1; dy++)
+                    for (int dx = -1; dx <= 1; dx++)
+                    {
+                        int x = cx + dx, y = cy + dy;
+                        if (x < 0 || y < 0 || x >= _w || y >= _h) continue;
+                        _px[y * _w + x] = c;
+                    }
+            }
         }
     }
 }
