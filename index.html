@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+  <title>Mendal — химическая песочница</title>
+  <meta name="description" content="Mendal — интерактивная 3D-песочница по химии: собирай молекулы и смотри, как идут реакции.">
+  <link rel="icon" type="image/svg+xml" href="TemplateData/mark.svg">
+  <style>
+    html, body { margin: 0; height: 100%; background: #0A0F1C; overflow: hidden; }
+    body { font-family: -apple-system, "Segoe UI", Inter, Roboto, sans-serif; color: #E6ECF5; }
+    #unity-canvas { position: fixed; inset: 0; width: 100%; height: 100%; display: block; background: #0A0F1C; outline: none; }
+    #loader { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 22px;
+              background: radial-gradient(ellipse at center, #121a2e 0%, #0A0F1C 70%); transition: opacity .5s; }
+    #loader.done { opacity: 0; pointer-events: none; }
+    .brand { display: flex; align-items: center; gap: 14px; }
+    .brand svg { width: 64px; height: 64px; filter: drop-shadow(0 0 12px rgba(92,225,230,.45)); }
+    .brand span { font-size: 40px; font-weight: 800; letter-spacing: .5px; }
+    .bar { width: min(360px, 70vw); height: 6px; border-radius: 3px; background: rgba(255,255,255,.08); overflow: hidden; }
+    .bar i { display: block; height: 100%; width: 0; border-radius: 3px; background: linear-gradient(90deg, #5CE1E6, #FFB547); transition: width .2s; }
+    #status { font-size: 14px; color: #8A96AD; min-height: 20px; text-align: center; max-width: 80vw; }
+    #status.error { color: #FF8A7A; }
+    .note { position: fixed; bottom: 18px; font-size: 12px; color: #5B667D; text-align: center; width: 100%; }
+  </style>
+</head>
+<body>
+  <canvas id="unity-canvas" tabindex="-1"></canvas>
+  <div id="loader">
+    <div class="brand">
+      <svg viewBox="-8 -8 136 136" aria-hidden="true"><path d="M20 100 L20 22 L60 66 L100 22 L100 100" fill="none" stroke="#5CE1E6" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/><circle cx="20" cy="100" r="12" fill="#5CE1E6"/><circle cx="20" cy="22" r="12" fill="#5CE1E6"/><circle cx="60" cy="66" r="14" fill="#FFB547"/><circle cx="100" cy="22" r="12" fill="#5CE1E6"/><circle cx="100" cy="100" r="12" fill="#5CE1E6"/></svg>
+      <span>Mendal</span>
+    </div>
+    <div class="bar"><i id="progress"></i></div>
+    <div id="status">Загружаем лабораторию…</div>
+    <div class="note">Лучше всего работает на компьютере в Chrome, Edge, Firefox или Safari. Первый запуск дольше — дальше браузер помнит файлы.</div>
+  </div>
+
+  <script>
+    var canvas = document.getElementById('unity-canvas');
+    var loader = document.getElementById('loader');
+    var progress = document.getElementById('progress');
+    var statusEl = document.getElementById('status');
+
+    function fail(message) {
+      statusEl.textContent = message;
+      statusEl.className = 'error';
+    }
+
+    if (/iPhone|iPad|iPod|Android/i.test(navigator.userAgent)) {
+      statusEl.textContent = 'На телефоне может работать медленно — лучше открыть на компьютере.';
+    }
+
+    var buildUrl = 'Build';
+    var config = {
+      dataUrl: buildUrl + '/web.data',
+      frameworkUrl: buildUrl + '/web.framework.js',
+      codeUrl: buildUrl + '/web.wasm',
+      streamingAssetsUrl: 'StreamingAssets',
+      autoSyncPersistentDataPath: true,
+      companyName: "Mendal",
+      productName: "Mendal",
+      productVersion: "0.8",
+      showBanner: function (msg, type) { if (type === 'error') fail(msg); else console.warn(msg); },
+    };
+
+    // Чёткая картинка на Retina, но без лишней нагрузки на 4K.
+    config.devicePixelRatio = Math.min(window.devicePixelRatio || 1, 2);
+
+    var script = document.createElement('script');
+    script.src = buildUrl + '/web.loader.js';
+    script.onload = function () {
+      createUnityInstance(canvas, config, function (p) {
+        progress.style.width = Math.round(p * 100) + '%';
+        statusEl.textContent = p < 0.9 ? 'Загружаем лабораторию… ' + Math.round(p * 100) + '%' : 'Готовим атомы…';
+      }).then(function () {
+        loader.className = 'done';
+        canvas.focus();
+      }).catch(function (e) {
+        fail('Не удалось запустить: ' + e + '. Нужен браузер с поддержкой WebGL 2.');
+      });
+    };
+    script.onerror = function () { fail('Не удалось загрузить файлы игры. Проверьте интернет и обновите страницу.'); };
+    document.body.appendChild(script);
+  </script>
+</body>
+</html>
