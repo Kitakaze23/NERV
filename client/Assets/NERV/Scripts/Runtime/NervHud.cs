@@ -762,7 +762,9 @@ namespace Nerv.Client
             if (MoleculeCardPanel.Instance != null && MoleculeCardPanel.Instance.IsOpen) right -= 440f + 16f;
             float width = Mathf.Clamp(right - left, 320f, 460f);
             _stepRect.sizeDelta = new Vector2(width, _stepRect.sizeDelta.y);
-            _stepRect.anchoredPosition = new Vector2((left + right) / 2f - canvasW / 2f, -(TopBarBottom + 4));
+            // В «Лаборатории» сверху по центру — строка слоёв: карточка встаёт под неё.
+            float top = TopBarBottom + 4 + (NervApp.Instance != null && NervApp.Instance.LabMode ? UI.LabPanel.LayersBarHeight + 8 : 0);
+            _stepRect.anchoredPosition = new Vector2((left + right) / 2f - canvasW / 2f, -top);
         }
 
         // ================= Подписи над молекулами =================

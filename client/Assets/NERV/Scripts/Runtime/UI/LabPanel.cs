@@ -55,6 +55,16 @@ namespace Nerv.Client.UI
         private float _smoothA, _smoothB, _smoothC;
         private bool _smoothInit;
 
+        // Слои: строка переключателей и подписи над атомами.
+        private RectTransform _layersBar, _layerLabels;
+        private readonly Dictionary<NervLayers.Layer, Button> _layerButtons = new Dictionary<NervLayers.Layer, Button>();
+        private readonly List<Text> _labelPool = new List<Text>();
+        private int _labelsUsed;
+        private readonly Dictionary<int, float> _bondLen = new Dictionary<int, float>();
+        private readonly Dictionary<AtomId, float> _angle = new Dictionary<AtomId, float>();
+        private float[] _q = new float[64];
+        private List<int>[] _nb = new List<int>[0];
+
         public bool Visible => _panel != null && _panel.gameObject.activeSelf;
         public int MeasuredCount => _measure.Count;
         public bool IsMeasured(AtomId id) => _measure.Contains(id);
@@ -135,6 +145,8 @@ namespace Nerv.Client.UI
             NervUI.Stretch(_readoutText.rectTransform, 8);
             _readout.gameObject.SetActive(false);
 
+            BuildLayers(root);
+
             var lineGo = new GameObject("Measure Lines");
             lineGo.transform.SetParent(transform, false);
             _lines = lineGo.AddComponent<LineRenderer>();
@@ -143,6 +155,141 @@ namespace Nerv.Client.UI
             _lines.widthMultiplier = 0.012f;
             _lines.positionCount = 0;
             _lines.numCapVertices = 2;
+        }
+
+        // ================= Слои =================
+
+        /// <summary>Высота строки слоёв: карточка шага реакции в «Лаборатории» опускается на неё.</summary>
+        public const float LayersBarHeight = 52f;
+
+        private void BuildLayers(Transform root)
+        {
+            Image bar = NervUI.Panel(root, "Lab Layers", 14);
+            _layersBar = bar.rectTransform;
+            _layersBar.anchorMin = _layersBar.anchorMax = new Vector2(0.5f, 1);
+            _layersBar.pivot = new Vector2(0.5f, 1);
+            _layersBar.anchoredPosition = new Vector2(0, -(NervHud.TopBarBottom + 4));
+            NervUI.RegisterOccluder(_layersBar);
+            Text title = NervUI.Label(bar.transform, "СЛОИ", NervUI.DisplayMedium, 11, NervUI.Muted, TextAnchor.MiddleLeft);
+            NervUI.Place(title.rectTransform, 16, 6, 56, 40);
+            float x = 72;
+            foreach (NervLayers.Layer l in NervLayers.All)
+            {
+                NervLayers.Layer layer = l;
+                string name = NervLayers.Name(l);
+                float w = 24 + name.Length * 8.2f;
+                Button b = NervUI.Button(bar.transform, name, NervUI.ButtonStyle.Ghost, () => NervLayers.Toggle(layer), 13, 8);
+                NervUI.Place((RectTransform)b.transform, x, 6, w, 40);
+                _layerButtons[l] = b;
+                x += w + 6;
+            }
+            _layersBar.sizeDelta = new Vector2(x + 10, LayersBarHeight);
+
+            // Подписи слоёв — сразу над подписями молекул HUD, под панелями.
+            _layerLabels = NervUI.Stretch(NervUI.Rect(root, "Layer Labels"));
+            Transform hudLabels = root.Find("Labels");
+            _layerLabels.SetSiblingIndex(hudLabels != null ? hudLabels.GetSiblingIndex() + 1 : 0);
+        }
+
+        private void UpdateLayerLabels(NervApp app)
+        {
+            _labelsUsed = 0;
+            bool lengths = NervLayers.On(NervLayers.Layer.BondLengths), angles = NervLayers.On(NervLayers.Layer.Angles),
+                 charges = NervLayers.On(NervLayers.Layer.Charges);
+            Camera cam = NervEnvironment.MainCamera;
+            WorldSnapshot snap = app.Snapshot;
+            if (cam != null && (lengths || angles || charges))
+            {
+                float k = 1f - Mathf.Exp(-Time.unscaledDeltaTime / 0.3f);
+                int n = snap.AtomCount;
+                if (_nb.Length < n)
+                {
+                    _nb = new List<int>[Mathf.Max(n, _nb.Length * 2)];
+                    for (int i = 0; i < _nb.Length; i++) _nb[i] = new List<int>(4);
+                }
+                for (int i = 0; i < n; i++) _nb[i].Clear();
+                foreach (BondView b in snap.Bonds)
+                {
+                    _nb[b.IndexA].Add(b.IndexB);
+                    _nb[b.IndexB].Add(b.IndexA);
+                }
+
+                if (lengths)
+                {
+                    var seen = new HashSet<int>();
+                    foreach (BondView b in snap.Bonds)
+                    {
+                        if (_labelsUsed >= 90) break;
+                        float d = Vector3.Distance(Pos(snap, b.IndexA), Pos(snap, b.IndexB));
+                        float sm = _bondLen.TryGetValue(b.Id, out float prev) ? Mathf.Lerp(prev, d, k) : d;
+                        _bondLen[b.Id] = sm;
+                        seen.Add(b.Id);
+                        Vector3 mid = (app.AtomWorld(b.IndexA) + app.AtomWorld(b.IndexB)) * 0.5f;
+                        PlaceLabel(cam, mid, Vector2.zero, NervUI.Num(sm, "0.00") + " Å", NervUI.TextSoft, 11);
+                    }
+                    if (_bondLen.Count > seen.Count * 2 + 32)
+                        foreach (int id in _bondLen.Keys.Where(id => !seen.Contains(id)).ToList()) _bondLen.Remove(id);
+                }
+                if (angles)
+                    for (int i = 0; i < n && _labelsUsed < 140; i++)
+                    {
+                        List<int> nb = _nb[i];
+                        if (nb.Count < 2 || nb.Count > 4) continue;
+                        Vector3 c = Pos(snap, i);
+                        float sum = 0;
+                        int cnt = 0;
+                        for (int a = 0; a < nb.Count; a++)
+                            for (int b = a + 1; b < nb.Count; b++)
+                            {
+                                sum += Vector3.Angle(Pos(snap, nb[a]) - c, Pos(snap, nb[b]) - c);
+                                cnt++;
+                            }
+                        float ang = sum / cnt;
+                        float sm = _angle.TryGetValue(snap.Ids[i], out float prev) ? Mathf.Lerp(prev, ang, k) : ang;
+                        _angle[snap.Ids[i]] = sm;
+                        string text = NervUI.Num(sm, "0.0") + "°" + (nb.Count > 2 ? " ср." : "");
+                        PlaceLabel(cam, app.AtomWorld(i), new Vector2(0, 26), text, NervUI.Heat, 12);
+                    }
+                if (charges)
+                {
+                    if (_q.Length < n) _q = new float[Mathf.Max(n, _q.Length * 2)];
+                    NervLayers.PartialCharges(snap, _q);
+                    for (int i = 0; i < n && _labelsUsed < 200; i++)
+                    {
+                        if (snap.Charges[i] != 0 || Mathf.Abs(_q[i]) < 0.12f) continue; // у ионов свой ореол со знаком
+                        bool neg = _q[i] < 0;
+                        PlaceLabel(cam, app.AtomWorld(i), new Vector2(0, -24), neg ? "δ−" : "δ+",
+                            neg ? new Color32(0xFF, 0x8A, 0x8A, 0xFF) : new Color32(0x8F, 0xB8, 0xFF, 0xFF), 14);
+                    }
+                }
+            }
+            for (int i = _labelsUsed; i < _labelPool.Count; i++)
+                if (_labelPool[i].gameObject.activeSelf) _labelPool[i].gameObject.SetActive(false);
+        }
+
+        private void PlaceLabel(Camera cam, Vector3 world, Vector2 offset, string text, Color color, int size)
+        {
+            Vector3 sp = cam.WorldToScreenPoint(world);
+            if (sp.z <= 0) return;
+            Text t;
+            if (_labelsUsed < _labelPool.Count) t = _labelPool[_labelsUsed];
+            else
+            {
+                t = NervUI.Label(_layerLabels, "", NervUI.Mono, 12, Color.white, TextAnchor.MiddleCenter);
+                t.rectTransform.anchorMin = t.rectTransform.anchorMax = Vector2.zero;
+                t.rectTransform.sizeDelta = new Vector2(96, 18);
+                t.raycastTarget = false;
+                Outline o = t.gameObject.AddComponent<Outline>();
+                o.effectColor = new Color(0.02f, 0.03f, 0.06f, 0.9f);
+                _labelPool.Add(t);
+            }
+            _labelsUsed++;
+            if (!t.gameObject.activeSelf) t.gameObject.SetActive(true);
+            if (t.text != text) t.text = text;
+            t.color = color;
+            t.fontSize = size;
+            float scale = NervUI.Canvas.scaleFactor;
+            t.rectTransform.anchoredPosition = new Vector2(sp.x / scale, sp.y / scale) + offset;
         }
 
         private static Text Axis(Transform parent, float x, float y, TextAnchor anchor)
@@ -166,6 +313,9 @@ namespace Nerv.Client.UI
             if (_panel.gameObject.activeSelf != lab) _panel.gameObject.SetActive(lab);
             if (!lab || NervInteraction.Instance == null || NervInteraction.Instance.Tool != NervTool.Measure) ClearMeasure();
             if (lab) DrawChart();
+            if (_layersBar.gameObject.activeSelf != lab) _layersBar.gameObject.SetActive(lab);
+            foreach (KeyValuePair<NervLayers.Layer, Button> kv in _layerButtons) NervUI.SetActive(kv.Value, NervLayers.Selected(kv.Key));
+            UpdateLayerLabels(app);
             UpdateMeasure(app);
         }
 

@@ -22,6 +22,13 @@ namespace Nerv.Client
         private readonly Dictionary<int, List<Matrix4x4>> _atoms = new Dictionary<int, List<Matrix4x4>>();
         private readonly Dictionary<int, List<Matrix4x4>> _bonds = new Dictionary<int, List<Matrix4x4>>();
         private readonly List<Matrix4x4> _dots = new List<Matrix4x4>();
+        // Слои «Лаборатории»: неподелённые пары (бледные парные точки) и потенциал (ореол по частичному заряду).
+        private readonly List<Matrix4x4> _pairs = new List<Matrix4x4>();
+        private readonly List<Matrix4x4>[] _potNeg = { new List<Matrix4x4>(), new List<Matrix4x4>(), new List<Matrix4x4>() };
+        private readonly List<Matrix4x4>[] _potPos = { new List<Matrix4x4>(), new List<Matrix4x4>(), new List<Matrix4x4>() };
+        private readonly Material[] _potNegMat = new Material[3], _potPosMat = new Material[3];
+        private Material _pairMaterial;
+        private float[] _q = new float[64];
         private readonly List<Matrix4x4> _highlight = new List<Matrix4x4>();
         private readonly List<Matrix4x4> _cations = new List<Matrix4x4>();
         private readonly List<Matrix4x4> _anions = new List<Matrix4x4>();
@@ -62,6 +69,13 @@ namespace Nerv.Client
             _sphere = PrimitiveMesh(PrimitiveType.Sphere);
             _cylinder = PrimitiveMesh(PrimitiveType.Cylinder);
             _dotMaterial = MakeMaterial(new Color(0.85f, 1f, 1f), NervEnvironment.Energy * 3f, 0.9f);
+            _pairMaterial = MakeMaterial(new Color(0.55f, 0.62f, 0.75f), new Color(0.08f, 0.1f, 0.14f), 0.6f);
+            for (int k = 0; k < 3; k++)
+            {
+                float a = 0.45f + 0.35f * k;
+                _potNegMat[k] = MakeHalo(new Color(1f, 0.3f, 0.3f), a, 0.04f);
+                _potPosMat[k] = MakeHalo(new Color(0.35f, 0.55f, 1f), a, 0.04f);
+            }
             _highlightMaterial = MakeHalo(new Color(0.36f, 0.88f, 0.9f), 1.6f, 0.05f);
             if (_highlightMaterial == null)
             {
@@ -200,6 +214,14 @@ namespace Nerv.Client
             foreach (List<Matrix4x4> l in _atoms.Values) l.Clear();
             foreach (List<Matrix4x4> l in _bonds.Values) l.Clear();
             _dots.Clear();
+            _pairs.Clear();
+            for (int k = 0; k < 3; k++) { _potNeg[k].Clear(); _potPos[k].Clear(); }
+            bool lonePairs = NervLayers.On(NervLayers.Layer.LonePairs), potential = NervLayers.On(NervLayers.Layer.Potential);
+            if (potential)
+            {
+                if (_q.Length < snap.AtomCount) _q = new float[Mathf.Max(snap.AtomCount, _q.Length * 2)];
+                NervLayers.PartialCharges(snap, _q);
+            }
             _highlight.Clear();
             _cations.Clear();
             _anions.Clear();
@@ -261,7 +283,17 @@ namespace Nerv.Client
                     float k = 2f * r * (1.6f + 0.2f * Mathf.Min(Mathf.Abs(q) - 1, 2));
                     (q > 0 ? _cations : _anions).Add(Matrix4x4.TRS(p, Quaternion.identity, Vector3.one * k));
                 }
-                if (snap.FreeValences[i] > 0 && NervView.Annotations) AddValenceDots(app, snap, i, p, r);
+                if ((snap.FreeValences[i] > 0 && NervView.Annotations) || (lonePairs && snap.LonePairs[i] > 0))
+                    AddValenceDots(app, snap, i, p, r, NervView.Annotations ? snap.FreeValences[i] : 0, lonePairs ? snap.LonePairs[i] : 0);
+                if (potential)
+                {
+                    float qa = Mathf.Abs(_q[i]);
+                    if (qa >= 0.12f)
+                    {
+                        int level = qa < 0.3f ? 0 : qa < 0.6f ? 1 : 2;
+                        (_q[i] < 0 ? _potNeg : _potPos)[level].Add(Matrix4x4.TRS(p, Quaternion.identity, Vector3.one * (2f * r * 1.75f)));
+                    }
+                }
                 if (_unstableAtoms.Count > 0 && _unstableAtoms.Contains(snap.Ids[i]))
                     _unstable.Add(Matrix4x4.TRS(p, Quaternion.identity, Vector3.one * (2f * r * 1.55f)));
             }
@@ -299,6 +331,12 @@ namespace Nerv.Client
             foreach (KeyValuePair<int, List<Matrix4x4>> kv in _atoms) Draw(_sphere, ElementMaterial(kv.Key), kv.Value, true);
             foreach (KeyValuePair<int, List<Matrix4x4>> kv in _bonds) Draw(_cylinder, ElementMaterial(kv.Key), kv.Value, true);
             Draw(_sphere, _dotMaterial, _dots, false);
+            if (_pairMaterial != null) Draw(_sphere, _pairMaterial, _pairs, false);
+            for (int k = 0; k < 3; k++)
+            {
+                if (_potNegMat[k] != null) Draw(_sphere, _potNegMat[k], _potNeg[k], false);
+                if (_potPosMat[k] != null) Draw(_sphere, _potPosMat[k], _potPos[k], false);
+            }
             Draw(_sphere, _highlightMaterial, _highlight, false);
             if (_cationMaterial != null) Draw(_sphere, _cationMaterial, _cations, false);
             if (_anionMaterial != null) Draw(_sphere, _anionMaterial, _anions, false);
@@ -315,13 +353,14 @@ namespace Nerv.Client
         /// Точки свободной валентности: жадно выбираем направления, максимально удалённые
         /// от соседей и друг от друга (приближение VSEPR: у свободного C — тетраэдр, у O в OH — «в сторону»).
         /// </summary>
-        private void AddValenceDots(NervApp app, WorldSnapshot snap, int i, Vector3 p, float r)
+        private void AddValenceDots(NervApp app, WorldSnapshot snap, int i, Vector3 p, float r, int freeCount, int lonePairs)
         {
             _used.Clear();
             foreach (int j in _neighbors[i]) _used.Add((app.AtomWorld(j) - p).normalized);
-            int free = Mathf.Min(snap.FreeValences[i], 4);
+            int free = Mathf.Min(freeCount, 4);
+            int total = Mathf.Min(free + lonePairs, 4);
             float dotR = 0.07f * NervApp.MetersPerAngstrom;
-            for (int k = 0; k < free; k++)
+            for (int k = 0; k < total; k++)
             {
                 Vector3 best = Directions[0];
                 float bestScore = float.MinValue;
@@ -337,7 +376,18 @@ namespace Nerv.Client
                     }
                 }
                 _used.Add(best);
-                _dots.Add(Matrix4x4.TRS(p + best * (r + 0.1f * NervApp.MetersPerAngstrom), Quaternion.identity, Vector3.one * (2f * dotR)));
+                Vector3 at = p + best * (r + 0.1f * NervApp.MetersPerAngstrom);
+                if (k < free)
+                {
+                    _dots.Add(Matrix4x4.TRS(at, Quaternion.identity, Vector3.one * (2f * dotR)));
+                    continue;
+                }
+                // Неподелённая пара — две бледные точки рядом, поперёк направления.
+                Vector3 side = Vector3.Cross(best, Vector3.up);
+                if (side.sqrMagnitude < 1e-4f) side = Vector3.Cross(best, Vector3.right);
+                side = side.normalized * (0.075f * NervApp.MetersPerAngstrom);
+                _pairs.Add(Matrix4x4.TRS(at + side, Quaternion.identity, Vector3.one * (1.6f * dotR)));
+                _pairs.Add(Matrix4x4.TRS(at - side, Quaternion.identity, Vector3.one * (1.6f * dotR)));
             }
         }
 
