@@ -667,8 +667,8 @@ namespace Nerv.Client
 
         private void RefreshRight(NervApp app, WorldSnapshot snap)
         {
-            _temperatureValue.text = app.Temperature.ToString("0") + " K";
-            _temperatureNow.text = "сейчас в сцене " + snap.Temperature.ToString("0") + " K";
+            _temperatureValue.text = NervUI.Kelvin(app.Temperature);
+            _temperatureNow.text = "сейчас в сцене " + NervUI.Kelvin(snap.Temperature);
             _temperature.SetValueWithoutNotify((float)app.Temperature);
             _speedValue.text = "×" + NervUI.Num(app.TimeScale, app.TimeScale < 1 ? "0.00" : "0.0");
             _speed.SetValueWithoutNotify(Mathf.Log((float)app.TimeScale, 2f));

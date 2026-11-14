@@ -382,6 +382,13 @@ namespace Nerv.Client.UI
         public static Color WithAlpha(Color c, float a) => new Color(c.r, c.g, c.b, a);
 
         /// <summary>Число с запятой, как принято в русском тексте: 15,999.</summary>
+        /// <summary>Температура в двух шкалах: «298 K · 25 °C» (школьникам привычнее Цельсий, химикам — Кельвин).</summary>
+        public static string Kelvin(double k)
+        {
+            double c = k - 273.15;
+            return k.ToString("0") + " K · " + (c < -0.5 ? "−" + (-c).ToString("0") : c.ToString("0")) + " °C";
+        }
+
         public static string Num(double v, string format) =>
             v.ToString(format, System.Globalization.CultureInfo.InvariantCulture).Replace('.', ',');
 

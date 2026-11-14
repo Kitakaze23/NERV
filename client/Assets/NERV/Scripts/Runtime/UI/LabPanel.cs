@@ -436,7 +436,7 @@ namespace Nerv.Client.UI
                         var pts = _samples.Select(s => new Vector2(s.TimePs, s.Temperature)).ToList();
                         yMax = Mathf.Max(400f, pts.Max(p => p.y) * 1.08f);
                         series.Add((NervUI.Heat, pts));
-                        names.Add("температура сцены  " + Mathf.RoundToInt(pts[pts.Count - 1].y) + " K");
+                        names.Add("температура сцены  " + NervUI.Kelvin(pts[pts.Count - 1].y));
                         unit = "K";
                         break;
                     }
@@ -535,7 +535,7 @@ namespace Nerv.Client.UI
                 text = e.Symbol + " · " + e.NameRu.ToLowerInvariant() +
                        "\nзаряд " + (q > 0 ? "+" + q : q < 0 ? "−" + (-q) : "0") +
                        " · свободных связей " + snap.FreeValences[i] +
-                       "\nтемпература атома ≈ " + Mathf.RoundToInt(_smoothA) + " K";
+                       "\nтемпература атома ≈ " + NervUI.Kelvin(_smoothA);
             }
             else if (idx.Count == 2)
             {
