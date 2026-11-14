@@ -52,14 +52,13 @@
 
     var buildUrl = 'Build';
     var config = {
-      dataUrl: buildUrl + '/web.data',
-      frameworkUrl: buildUrl + '/web.framework.js',
-      codeUrl: buildUrl + '/web.wasm',
+      dataUrl: buildUrl + '/web.data.unityweb',
+      frameworkUrl: buildUrl + '/web.framework.js.unityweb',
+      codeUrl: buildUrl + '/web.wasm.unityweb',
       streamingAssetsUrl: 'StreamingAssets',
-      autoSyncPersistentDataPath: true,
-      companyName: "Mendal",
+      companyName: "DefaultCompany",
       productName: "Mendal",
-      productVersion: "0.8",
+      productVersion: "0.1.0",
       showBanner: function (msg, type) { if (type === 'error') fail(msg); else console.warn(msg); },
     };
 
